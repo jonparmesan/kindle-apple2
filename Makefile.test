@@ -1,0 +1,56 @@
+# Makefile.test - Build headless test on macOS
+CC          = cc
+CFLAGS      = -std=gnu99 -Wall -g -O2
+CFLAGS      += -Isrc -Isrc/format -Isrc/drivers -Isrc/roms
+CFLAGS      += -DMII_65C02_DIRECT_ACCESS=1 -DMII_NO_MISH=1
+# macOS endian compat
+CFLAGS      += -include src/endian_compat.h
+
+O           = build-test
+BIN         = $(O)/bin
+
+# Core emulator
+MII_CORE    = mii.c mii_65c02.c mii_65c02_disasm.c mii_65c02_asm.c \
+              mii_bank.c mii_video.c mii_rom.c mii_audio.c \
+              mii_analog.c mii_slot.c mii_speaker.c mii_argv.c \
+              mii_vcd.c md5.c
+
+# Format support
+MII_FMT     = mii_dd.c mii_dsk.c mii_floppy.c mii_nib.c mii_woz.c
+
+# Drivers
+MII_DRV     = mii_disk2.c mii_noslotclock.c
+
+# ROMs (compiled-in)
+MII_ROM     = mii_rom_iiee.c mii_rom_iiee_video.c mii_rom_disk2_p5.c
+
+# Our test harness
+MII_TEST    = mii_test_main.c
+
+SRCS        = $(addprefix src/, $(MII_CORE)) \
+              $(addprefix src/format/, $(MII_FMT)) \
+              $(addprefix src/drivers/, $(MII_DRV)) \
+              $(addprefix src/roms/, $(MII_ROM)) \
+              $(MII_TEST)
+
+OBJS        = $(patsubst %.c, $(O)/%.o, $(notdir $(SRCS)))
+
+VPATH       = src:src/format:src/drivers:src/roms:.
+
+LDLIBS      = -lm
+
+all: $(BIN)/mii_test
+
+$(BIN)/mii_test: $(OBJS) | $(BIN)
+	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDLIBS)
+
+$(O)/%.o: %.c | $(O)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(O) $(BIN):
+	mkdir -p $@
+
+clean:
+	rm -rf $(O)
+
+.PHONY: all clean

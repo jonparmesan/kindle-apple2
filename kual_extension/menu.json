@@ -1,0 +1,12 @@
+{
+    "items": [
+        {
+            "name": "Apple IIe Emulator",
+            "priority": 0,
+            "action": "./apple2.sh",
+            "params": "",
+            "exitmenu": true,
+            "status": false
+        }
+    ]
+}

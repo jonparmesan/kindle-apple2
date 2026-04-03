@@ -1,0 +1,13 @@
+build-*/
+*.o
+*.pgm
+*.png
+kindle-apple2
+kindle-apple2-static
+apple2.log
+.DS_Store
+kual_extension/disks/*.do
+kual_extension/disks/*.dsk
+kual_extension/disks/*.nib
+kual_extension/disks/*.woz
+kual_extension/apple2

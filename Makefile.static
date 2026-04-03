@@ -1,0 +1,50 @@
+# Makefile.static - Static ARM build using zig + musl (no dynamic linker needed)
+CC          = zig cc -target arm-linux-musleabi
+CFLAGS      = -std=gnu99 -Os -Wall
+CFLAGS     += -Isrc -Isrc/format -Isrc/drivers -Isrc/roms
+CFLAGS     += -DMII_65C02_DIRECT_ACCESS=1 -DMII_NO_MISH=1 -DKINDLE
+CFLAGS     += -include endian.h
+LDFLAGS     = -static
+
+O           = build-static
+OUTPUT      = kindle-apple2-static
+
+MII_CORE    = mii.c mii_65c02.c mii_65c02_disasm.c mii_65c02_asm.c \
+              mii_bank.c mii_video.c mii_rom.c mii_audio.c \
+              mii_analog.c mii_slot.c mii_speaker.c mii_argv.c \
+              mii_vcd.c md5.c
+MII_FMT     = mii_dd.c mii_dsk.c mii_floppy.c mii_nib.c mii_woz.c
+MII_DRV     = mii_disk2.c mii_noslotclock.c
+MII_ROM     = mii_rom_iiee.c mii_rom_iiee_video.c mii_rom_disk2_p5.c
+KINDLE_SRC  = mii_kindle_fb.c mii_kindle_input.c mii_kindle_main.c
+
+SRCS        = $(addprefix src/, $(MII_CORE)) \
+              $(addprefix src/format/, $(MII_FMT)) \
+              $(addprefix src/drivers/, $(MII_DRV)) \
+              $(addprefix src/roms/, $(MII_ROM)) \
+              $(addprefix src/, $(KINDLE_SRC))
+
+OBJS        = $(patsubst %.c, $(O)/%.o, $(notdir $(SRCS)))
+VPATH       = src:src/format:src/drivers:src/roms
+
+LDLIBS      = -lm -lc
+
+all: $(OUTPUT)
+
+$(OUTPUT): $(OBJS)
+	@echo "[Linking $@ (static)]"
+	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(LDLIBS)
+	file $@
+	ls -lh $@
+
+$(O)/%.o: %.c | $(O)
+	@echo "[CC] $<"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+$(O):
+	mkdir -p $@
+
+clean:
+	rm -rf $(O) $(OUTPUT)
+
+.PHONY: all clean
