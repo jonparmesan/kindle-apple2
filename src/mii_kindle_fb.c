@@ -251,6 +251,65 @@ kindle_fb_detect_keyboard_top(void)
 	return kb_top;
 }
 
+/*
+ * 4x4 ordered Bayer dither matrix, scaled to 0-255.
+ * Produces stable spatial patterns that work well on e-ink
+ * (no temporal shimmer like Floyd-Steinberg would cause).
+ */
+static const uint8_t bayer4[4][4] = {
+	{   0, 128,  32, 160 },
+	{ 192,  64, 224,  96 },
+	{  48, 176,  16, 144 },
+	{ 240, 112, 208,  80 },
+};
+
+void
+kindle_fb_render_pixels(const uint32_t *pixels)
+{
+	/*
+	 * Render the MII color pixel buffer (560x384, 2x Apple II res)
+	 * to the Kindle framebuffer with grayscale dithering.
+	 *
+	 * We sample every other pixel/line (280x192 effective) since
+	 * the MII buffer is 2x and matches the Apple II's true resolution.
+	 */
+	for (int line = 0; line < 192; line++) {
+		/* Screen Y range for this Apple II line */
+		int sy_start = game_y + line * game_h / 192;
+		int sy_end   = game_y + (line + 1) * game_h / 192;
+
+		for (int col = 0; col < 280; col++) {
+			/* Sample from top-left of each 2x2 block in the pixel buffer */
+			uint32_t rgba = pixels[(line * 2) * 560 + (col * 2)];
+			uint8_t r = rgba & 0xFF;
+			uint8_t g = (rgba >> 8) & 0xFF;
+			uint8_t b = (rgba >> 16) & 0xFF;
+
+			/* BT.601 luminance (integer approximation) */
+			uint8_t luma = (54 * r + 183 * g + 19 * b) >> 8;
+
+			/* Ordered dither: offset luminance by Bayer threshold,
+			 * then quantize to 4-bit (16 gray levels) */
+			int dithered = luma + ((int)bayer4[line & 3][col & 3] - 128) / 4;
+			if (dithered < 0) dithered = 0;
+			if (dithered > 255) dithered = 255;
+			uint8_t gray = dithered & 0xF0;
+
+			/* Screen X range for this Apple II pixel */
+			int sx_start = game_x + col * game_w / 280;
+			int sx_end   = game_x + (col + 1) * game_w / 280;
+
+			/* Fill the scaled rectangle */
+			for (int sy = sy_start; sy < sy_end && sy < (int)fb_yres; sy++) {
+				int row_off = sy * fb_stride;
+				for (int sx = sx_start; sx < sx_end && sx < (int)fb_xres; sx++) {
+					fb0[row_off + sx] = gray;
+				}
+			}
+		}
+	}
+}
+
 void
 kindle_fb_close(void)
 {

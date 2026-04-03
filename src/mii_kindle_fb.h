@@ -11,11 +11,17 @@
 /* Initialize the Kindle framebuffer. Detects resolution, computes scaling. */
 int kindle_fb_init(void);
 
-/* Render Apple II HIRES page to the Kindle framebuffer.
+/* Render Apple II HIRES page to the Kindle framebuffer (monochrome).
  * vram: pointer to full Apple II memory
  * base_addr: 0x2000 (page 1) or 0x4000 (page 2)
  */
 void kindle_fb_render_hires(const uint8_t *vram, uint16_t base_addr);
+
+/* Render MII color pixel buffer to Kindle framebuffer with dithering.
+ * pixels: mii.video.pixels (560x384 RGBA buffer, 2x Apple II resolution)
+ * Converts to grayscale with ordered Bayer dithering for e-ink.
+ */
+void kindle_fb_render_pixels(const uint32_t *pixels);
 
 /* Draw a filled rectangle (absolute screen coordinates) */
 void kindle_fb_rect(int x, int y, int w, int h, uint8_t color);
