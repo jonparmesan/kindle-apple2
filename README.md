@@ -185,15 +185,25 @@ We stripped MII down to ~14K LOC by removing the OpenGL/X11 UI, audio, mouse car
 
 ### Display rendering
 
-The Apple II HIRES screen is 280x192 pixels. While the original hardware could produce colors via NTSC artifact coloring, the emulator renders in monochrome mode for e-ink. The emulator:
+The Apple II HIRES screen is 280x192 pixels. The original hardware produced colors via NTSC artifact coloring (purple, green, orange, blue). The emulator supports two rendering modes:
 
-1. Reads the Apple II's HIRES video RAM directly (at memory address $2000 or $4000)
-2. Decodes the Apple II's interleaved scanline addressing
-3. Scales each pixel proportionally to fill the Kindle's screen width
-4. Writes pixel values directly to the Kindle's framebuffer (`/dev/fb0`) via `mmap`
-5. Triggers an e-ink display update via ioctl
+**Dithered mode (default):** The emulator renders full-color Apple II graphics internally, then converts to grayscale using ordered Bayer dithering. This maps the 16 Apple II colors to distinguishable gray patterns on the e-ink display, so color games (LORES, DHIRES, color HIRES) are actually playable. Different colors produce different gray levels instead of collapsing to flat black/white.
 
-The monochrome rendering maps each Apple II pixel to black (on) or white (off), which displays cleanly on e-ink without dithering. Games that relied heavily on color may lose some visual information, but most Apple II software was designed to be usable on monochrome monitors.
+**Monochrome mode (`--mono`):** Each Apple II pixel maps to black (on) or white (off) with no gray levels. Use this for text adventures and games designed for monochrome monitors.
+
+The rendering pipeline:
+
+1. MII's video system renders Apple II graphics to a 560x384 RGBA pixel buffer
+2. Each pixel is converted to grayscale luminance (BT.601 weighting)
+3. Ordered dithering (4x4 Bayer matrix) is applied to maximize contrast across the Kindle's 16 gray levels
+4. Pixels are scaled proportionally to fill the Kindle's screen width
+5. Values are written directly to the Kindle's framebuffer (`/dev/fb0`) via `mmap`
+6. An e-ink display update is triggered via ioctl
+
+To use monochrome mode for a specific game, add `--mono` before the disk path in `menu.json`:
+```json
+{"name": "Zork", "priority": 0, "action": "./apple2.sh", "params": "--mono disks/Zork.dsk", "exitmenu": true, "status": false}
+```
 
 The emulator detects the Kindle's screen resolution at startup (`FBIOGET_VSCREENINFO`) and computes the scaling dynamically, so it works on any Kindle model.
 
