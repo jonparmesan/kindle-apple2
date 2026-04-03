@@ -88,21 +88,47 @@ The emulator uses **kterm's on-screen keyboard** which appears at the bottom of 
 | Arrow keys | Cursor movement (varies by game) |
 | Enter/Return | Confirm selection, advance text |
 | Space | Space bar |
-| ESC | **Shows exit dialog** (see below) |
+| ESC | **Shows exit dialog** — save & exit, exit, or resume |
 | Ctrl+C | Immediate exit to Kindle |
+| Ctrl+D | **Disk swap overlay** — switch disk images at runtime |
 
 ### Exiting the emulator
 
 Press **ESC** on kterm's keyboard. The emulator pauses and shows:
 
 ```
-Exit to Kindle?  Y / N
+Exit to Kindle?
+S = Save & Exit
+Y = Exit   N = Resume
 ```
 
-- Press **Y** to quit and return to the Kindle home screen
+- Press **S** to save your game state and exit (resume next time you launch the same disk)
+- Press **Y** to quit without saving
 - Press **N** or **ESC** again to resume playing
 
 You can also press **Ctrl+C** for an immediate exit without the prompt.
+
+### Save states
+
+The emulator supports save states so you can resume games where you left off. When you choose **Save & Exit** from the exit menu (press S), the complete emulator state is saved to `/mnt/us/extensions/Apple2/saves/`. Next time you launch the same disk image, the save state is automatically loaded.
+
+To force a fresh boot (ignoring any saved state), add `--fresh` before the disk path:
+```json
+{"name": "Oregon Trail (fresh)", "priority": 0, "action": "./apple2.sh", "params": "--fresh disks/Oregon_Trail.do", "exitmenu": true, "status": false}
+```
+
+### Switching disks at runtime
+
+Press **Ctrl+D** during gameplay to open the disk selection overlay. This lets you swap disk images without restarting the emulator — essential for multi-disk games like Ultima, Bard's Tale, and Wizardry.
+
+In the disk selection overlay:
+- **Up/Down arrows** to browse available disks
+- **Enter** to load the selected disk
+- **D** to toggle between Drive 1 and Drive 2
+- **1-9** for quick selection by number
+- **ESC** to cancel and return to the game
+
+The overlay lists all disk images found in the `disks/` folder.
 
 ### Game-specific controls
 
@@ -121,9 +147,9 @@ Most Apple II disk images found online are in `.do` or `.dsk` format.
 
 ## Troubleshooting
 
-### The game shows a blank screen
+### The game shows a blank screen after the splash
 
-Apple II games boot from floppy disk, which takes time. **Wait 15-30 seconds** after launching. The emulator is running even if the screen appears blank — the Apple II is reading the virtual disk.
+Apple II games boot from floppy disk, which takes time. After the "Booting from disk..." splash screen, **wait 15-30 seconds** for the game to load. The status bar shows `[DISK]` when the virtual disk is being read.
 
 ### The game still doesn't load after waiting
 
@@ -141,9 +167,9 @@ This usually means the disk image file wasn't found. Check that:
 
 Make sure kterm is installed at `/mnt/us/extensions/kterm/`. The emulator launches through kterm to get the on-screen keyboard.
 
-### Some terminal text visible between game and keyboard
+### Status bar between game and keyboard
 
-This is a known cosmetic issue. The emulator renders the game on the top portion of the screen, and kterm's keyboard renders at the bottom. A thin strip of kterm's terminal may be visible in between. It doesn't affect gameplay.
+The thin strip between the game area and kterm's keyboard now displays a status bar showing disk activity (`[DISK]`) and rendering mode (`MONO` or `GRAY`).
 
 ### How to check logs
 
@@ -223,12 +249,12 @@ When you tap a game in KUAL, here's what happens:
 
 1. `apple2.sh` runs and suspends the Kindle UI framework (`lipc-set-prop`)
 2. The script launches kterm with the emulator as its child process
-3. The emulator opens `/dev/fb0`, detects screen resolution, and clears the terminal
+3. The emulator opens `/dev/fb0`, detects screen resolution, and shows a boot splash screen
 4. The emulator initializes the Apple IIe (CPU, memory, ROM, Disk II controller)
 5. The disk image is loaded into the virtual Disk II drive
-6. The Apple IIe boots from the virtual floppy (cold reset)
+6. If a save state exists for this disk, it is restored; otherwise the Apple IIe cold boots
 7. The main loop runs: execute CPU instructions → render HIRES to framebuffer → read keyboard → repeat
-8. On exit (ESC+Y or Ctrl+C), the emulator closes the framebuffer
+8. On exit (ESC → S/Y or Ctrl+C), the emulator optionally saves state, then closes the framebuffer
 9. The launch script restores the Kindle UI framework
 
 ### Cross-compilation
@@ -295,9 +321,11 @@ kindle-apple2/
 │   ├── menu.json            # KUAL menu (list of games)
 │   └── disks/               # Disk images go here
 ├── src/
-│   ├── mii_kindle_fb.c/h    # Kindle framebuffer backend
+│   ├── mii_kindle_fb.c/h    # Kindle framebuffer backend (splash, text, status bar)
 │   ├── mii_kindle_input.c/h # Keyboard input (stdin from kterm)
 │   ├── mii_kindle_main.c    # Main loop
+│   ├── mii_kindle_save.c/h  # Save/restore emulator state
+│   ├── mii_kindle_disks.c/h # Runtime disk switching overlay
 │   ├── mii.c/h              # MII emulator core
 │   ├── mii_65c02.c/h        # 65C02 CPU emulation
 │   ├── mii_video.c/h        # Apple II video rendering

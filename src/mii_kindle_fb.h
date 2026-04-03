@@ -44,3 +44,26 @@ uint8_t *kindle_fb_get_ptr(void); /* raw framebuffer pointer */
 /* Scan the framebuffer to find where kterm's keyboard starts.
  * Call after kterm has rendered (sleep first). Returns Y coordinate. */
 int kindle_fb_detect_keyboard_top(void);
+
+/* Draw text on the framebuffer using a built-in 5x7 bitmap font.
+ * x,y: top-left position in screen pixels
+ * str: null-terminated ASCII string
+ * color: grayscale value (0x00=black, 0xFF=white)
+ * font_scale: pixel multiplier (1=tiny, 2=small, 3=medium, etc.)
+ */
+void kindle_fb_draw_text(int x, int y, const char *str, uint8_t color,
+	int font_scale);
+
+/* Show boot splash screen with game name and "Booting..." message.
+ * disk_name: filename of the disk being loaded (basename only)
+ * mono: 1 if monochrome mode, 0 if dithered
+ */
+void kindle_fb_draw_splash(const char *disk_name, int mono);
+
+/* Show an error message on the framebuffer in a centered box. */
+void kindle_fb_draw_error(const char *message);
+
+/* Draw a status bar between game area and keyboard.
+ * text: status string to display (e.g., "[DISK] GRAY")
+ */
+void kindle_fb_draw_status(const char *text);

@@ -14,6 +14,8 @@
 static struct termios orig_termios;
 static int term_setup = 0;
 static int quit_requested = 0;
+static int save_requested = 0;
+static int disk_swap_requested = 0;
 static int exit_prompt_showing = 0;
 
 int
@@ -53,7 +55,7 @@ show_exit_prompt(void)
 	int sw = kindle_fb_get_xres();
 	int gh = kindle_fb_get_game_h();
 	int bw = sw * 2 / 3;
-	int bh = gh / 4;
+	int bh = gh / 3;
 	int bx = (sw - bw) / 2;
 	int by = (gh - bh) / 2;
 
@@ -64,11 +66,27 @@ show_exit_prompt(void)
 	kindle_fb_rect(bx, by, 3, bh, 0x00);
 	kindle_fb_rect(bx + bw - 3, by, 3, bh, 0x00);
 
-	/* Write prompt text to stdout so kterm renders it in the terminal */
-	/* (this appears in the terminal area, not on our framebuffer) */
-	/* Instead, just use the ANSI terminal output: */
-	write(STDOUT_FILENO, "\033[2J\033[H", 7);
-	write(STDOUT_FILENO, "\n\n   Exit to Kindle?  Y / N\n", 28);
+	/* Render prompt text directly on the framebuffer */
+	int scale = kindle_fb_get_scale();
+	int ts = (scale >= 4) ? 3 : 2;
+	int ss = (scale >= 4) ? 2 : 1;
+
+	const char *line1 = "Exit to Kindle?";
+	const char *line2 = "S = Save & Exit";
+	const char *line3 = "Y = Exit   N = Resume";
+	int l1w = 15 * 6 * ts;
+	int l2w = 15 * 6 * ss;
+	int l3w = 21 * 6 * ss;
+	int l1x = bx + (bw - l1w) / 2;
+	int l2x = bx + (bw - l2w) / 2;
+	int l3x = bx + (bw - l3w) / 2;
+	int l1y = by + bh / 5;
+	int l2y = by + bh / 2 - ss * 3;
+	int l3y = by + bh * 4 / 5 - ss * 7;
+
+	kindle_fb_draw_text(l1x, l1y, line1, 0x00, ts);
+	kindle_fb_draw_text(l2x, l2y, line2, 0x40, ss);
+	kindle_fb_draw_text(l3x, l3y, line3, 0x40, ss);
 
 	kindle_fb_update();
 	exit_prompt_showing = 1;
@@ -77,8 +95,7 @@ show_exit_prompt(void)
 static void
 hide_exit_prompt(void)
 {
-	/* Clear the terminal text */
-	write(STDOUT_FILENO, "\033[2J\033[H", 7);
+	/* Next frame render will overwrite the dialog area */
 	exit_prompt_showing = 0;
 }
 
@@ -94,8 +111,13 @@ kindle_input_poll(mii_t *mii)
 		/* Ctrl-C → quit immediately */
 		if (ch == 0x03) { quit_requested = 1; return 1; }
 
-		/* If exit prompt is showing, only handle Y/N */
+		/* If exit prompt is showing, handle S/Y/N */
 		if (exit_prompt_showing) {
+			if (ch == 's' || ch == 'S') {
+				save_requested = 1;
+				quit_requested = 1;
+				return 1;
+			}
 			if (ch == 'y' || ch == 'Y') {
 				quit_requested = 1;
 				return 1;
@@ -117,6 +139,9 @@ kindle_input_poll(mii_t *mii)
 			}
 		}
 
+		/* Ctrl-D → request disk swap */
+		if (ch == 0x04) { disk_swap_requested = 1; continue; }
+
 		/* ESC alone → show exit prompt */
 		if (ch == 0x1B) { show_exit_prompt(); continue; }
 
@@ -136,6 +161,20 @@ int
 kindle_input_is_paused(void)
 {
 	return exit_prompt_showing;
+}
+
+int
+kindle_input_save_requested(void)
+{
+	return save_requested;
+}
+
+int
+kindle_input_disk_swap_requested(void)
+{
+	int r = disk_swap_requested;
+	disk_swap_requested = 0;
+	return r;
 }
 
 void
