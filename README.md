@@ -8,7 +8,7 @@ Packaged as a [KUAL](https://www.mobileread.com/forums/showthread.php?t=203326) 
 
 Before installing, make sure you have:
 
-1. **A jailbroken Kindle** — Tested on Kindle Paperwhite (firmware 5.12.x). Other models should work but are untested.
+1. **A Kindle with KUAL support** — Tested on Kindle Paperwhite. Other models should work but are untested.
 2. **KUAL** — The Kindle Unified Application Launcher. This is how you'll launch the emulator. Install guide: [MobileRead thread](https://www.mobileread.com/forums/showthread.php?t=203326).
 3. **kterm** — A terminal emulator for Kindle that provides the on-screen keyboard. Download from [GitHub](https://github.com/bfabiszewski/kterm) or [MobileRead](https://www.mobileread.com/forums/showthread.php?t=244292). Copy the `kterm` folder to `/mnt/us/extensions/` on your Kindle.
 4. **Apple II disk images** — The emulator does not include any games. You'll need to provide your own disk images in `.do`, `.dsk`, `.nib`, `.woz`, or `.po` format. Many public domain Apple II programs are available online.
