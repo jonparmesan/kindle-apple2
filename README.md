@@ -1,6 +1,6 @@
 # kindle-apple2
 
-An Apple IIe emulator that runs directly on Kindle e-ink devices. Play classic Apple II games on your Kindle — the original 1-bit monochrome graphics are a perfect match for e-ink displays.
+An Apple IIe emulator that runs directly on Kindle e-ink devices. Play classic Apple II games on your Kindle — the emulator renders Apple II graphics in monochrome, which works well on e-ink displays.
 
 Packaged as a [KUAL](https://www.mobileread.com/forums/showthread.php?t=203326) extension. Uses [kterm](https://github.com/bfabiszewski/kterm) for on-screen keyboard input.
 
@@ -185,7 +185,7 @@ We stripped MII from ~85K LOC to ~30K LOC by removing the OpenGL/X11 UI, audio, 
 
 ### Display rendering
 
-The Apple II HIRES screen is 280x192 pixels, 1-bit monochrome. The emulator:
+The Apple II HIRES screen is 280x192 pixels. While the original hardware could produce colors via NTSC artifact coloring, the emulator renders in monochrome mode for e-ink. The emulator:
 
 1. Reads the Apple II's HIRES video RAM directly (at memory address $2000 or $4000)
 2. Decodes the Apple II's interleaved scanline addressing
@@ -193,7 +193,7 @@ The Apple II HIRES screen is 280x192 pixels, 1-bit monochrome. The emulator:
 4. Writes pixel values directly to the Kindle's framebuffer (`/dev/fb0`) via `mmap`
 5. Triggers an e-ink display update via ioctl
 
-The Apple II's monochrome graphics are a natural fit for e-ink — no color conversion or dithering needed. Each Apple II pixel maps directly to black (on) or white (off).
+The monochrome rendering maps each Apple II pixel to black (on) or white (off), which displays cleanly on e-ink without dithering. Games that relied heavily on color may lose some visual information, but most Apple II software was designed to be usable on monochrome monitors.
 
 The emulator detects the Kindle's screen resolution at startup (`FBIOGET_VSCREENINFO`) and computes the scaling dynamically, so it works on any Kindle model.
 
