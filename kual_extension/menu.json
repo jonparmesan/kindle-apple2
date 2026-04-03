@@ -1,7 +1,7 @@
 {
     "items": [
         {
-            "name": "Apple IIe Emulator",
+            "name": "Apple IIe: Auto (first disk)",
             "priority": 0,
             "action": "./apple2.sh",
             "params": "",

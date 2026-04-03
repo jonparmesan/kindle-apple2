@@ -1,20 +1,21 @@
 #!/bin/sh
 # Apple IIe Emulator for Kindle — KUAL Extension
-# Uses kterm for on-screen keyboard input
 cd "$(dirname "$0")"
 
-# Find the first .do or .dsk disk image in the disks/ folder
-DISK1=""
-for f in disks/*.do disks/*.dsk disks/*.nib disks/*.woz; do
-    if [ -f "$f" ]; then
-        DISK1="$f"
-        break
-    fi
-done
-
+# Disk image path passed as argument, or auto-detect first disk
+DISK1="$1"
 if [ -z "$DISK1" ]; then
-    eips 5 20 "No disk image found in disks/ folder"
-    eips 5 22 "Place .do or .dsk files there"
+    for f in disks/*.do disks/*.dsk disks/*.nib disks/*.woz; do
+        if [ -f "$f" ]; then
+            DISK1="$f"
+            break
+        fi
+    done
+fi
+
+if [ -z "$DISK1" ] || [ ! -f "$DISK1" ]; then
+    eips 5 20 "No disk image found"
+    eips 5 22 "Place .do/.dsk files in disks/ folder"
     sleep 3
     exit 1
 fi
@@ -28,8 +29,9 @@ eips -f -c 2>/dev/null
 sleep 1
 
 # Launch via kterm (provides the on-screen keyboard)
+FULL_PATH="/mnt/us/extensions/Apple2/$DISK1"
 /mnt/us/extensions/kterm/bin/kterm \
-  -e "/mnt/us/extensions/Apple2/apple2 /mnt/us/extensions/Apple2/$DISK1"
+  -e "/mnt/us/extensions/Apple2/apple2 $FULL_PATH"
 
 # Restore Kindle UI
 killall -CONT cvm 2>/dev/null

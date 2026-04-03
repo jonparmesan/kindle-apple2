@@ -26,6 +26,20 @@ Runs Apple II software directly on your Kindle's e-ink display. The emulator ren
 
 The emulator will boot the first disk image it finds in the `disks/` folder.
 
+## Adding Multiple Games
+
+Place multiple disk images in the `disks/` folder. Then run the menu generator to create a KUAL entry for each game:
+
+```bash
+# On the Kindle (via kterm or SSH):
+cd /mnt/us/extensions/Apple2
+sh gen_menu.sh
+```
+
+This scans `disks/` and generates a `menu.json` with a separate KUAL menu entry for each disk image. Next time you open KUAL, you'll see all your games listed under "Apple IIe".
+
+You can also edit `menu.json` manually to customize game names.
+
 ## Controls
 
 The on-screen keyboard (provided by kterm) gives you a full QWERTY layout with arrow keys, shift, and ctrl.
