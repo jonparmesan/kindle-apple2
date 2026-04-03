@@ -40,35 +40,38 @@ Apple2/
 
 ### Step 3: Set up the game menu
 
-You have two options:
+Edit `menu.json` in the `Apple2` folder on your computer (while the Kindle is connected via USB). This file controls what appears in KUAL. Add one entry per game:
 
-**Option A: Automatic** — If you have kterm or SSH access to your Kindle, run:
-```bash
-cd /mnt/us/extensions/Apple2
-sh gen_menu.sh
-```
-This scans the `disks/` folder and creates a KUAL menu entry for each disk image.
-
-**Option B: Manual** — Edit `menu.json` directly on your computer before ejecting the Kindle:
 ```json
 {
     "items": [
         {
             "name": "Games",
             "items": [
-                {"name": "My Game", "priority": 0, "action": "./apple2.sh", "params": "disks/my_game.dsk", "exitmenu": true, "status": false}
+                {"name": "Oregon Trail", "priority": 0, "action": "./apple2.sh", "params": "disks/Oregon_Trail.do", "exitmenu": true, "status": false},
+                {"name": "Taipan", "priority": 1, "action": "./apple2.sh", "params": "disks/Taipan.dsk", "exitmenu": true, "status": false}
             ]
         }
     ]
 }
 ```
-Add one entry per game. The `params` field is the path to the disk image relative to the `Apple2` folder.
+
+- The outer `"name": "Games"` creates a subfolder in KUAL
+- Each inner entry is a game — `"name"` is what shows in the menu, `"params"` is the disk image path
+- Increment `"priority"` for each entry to control the sort order
+
+Alternatively, if you have kterm or SSH access to the Kindle, you can auto-generate the menu:
+
+```bash
+cd /mnt/us/extensions/Apple2
+sh gen_menu.sh
+```
 
 ### Step 4: Launch
 
 1. Safely eject the Kindle from your computer
 2. On the Kindle, open **KUAL**
-3. Tap **Apple IIe** > **Games** > select a game
+3. Tap **Games** > select a game
 4. Wait 10-30 seconds for the Apple II to boot from the virtual floppy disk
 5. Play using kterm's on-screen keyboard
 

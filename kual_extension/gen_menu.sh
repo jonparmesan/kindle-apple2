@@ -1,43 +1,43 @@
 #!/bin/sh
 # Generates menu.json from disk images in the disks/ folder.
-# Run this after adding new disk images, or on the Kindle via kterm.
+# Creates a "Games" subfolder in KUAL with one entry per disk image.
+# Run this after adding new disk images.
 cd "$(dirname "$0")"
 
-cat > menu.json << 'HEADER'
-{
-    "items": [
-HEADER
-
+# Build the items list
+ITEMS=""
 PRIORITY=0
-FIRST=1
 
-for f in disks/*.do disks/*.dsk disks/*.nib disks/*.woz; do
+for f in disks/*.do disks/*.dsk disks/*.nib disks/*.woz disks/*.po; do
     [ ! -f "$f" ] && continue
 
-    # Extract game name from filename (strip path and extension)
+    # Extract game name from filename (strip path and extension, replace _ with space)
     NAME=$(basename "$f" | sed 's/\.[^.]*$//' | sed 's/_/ /g')
 
-    if [ $FIRST -eq 0 ]; then
-        echo "," >> menu.json
+    if [ $PRIORITY -gt 0 ]; then
+        ITEMS="$ITEMS,"
     fi
-    FIRST=0
 
-    cat >> menu.json << ENTRY
-        {
-            "name": "Apple IIe: $NAME",
-            "priority": $PRIORITY,
-            "action": "./apple2.sh",
-            "params": "$f",
-            "exitmenu": true,
-            "status": false
-        }
-ENTRY
+    ITEMS="$ITEMS
+                {\"name\": \"$NAME\", \"priority\": $PRIORITY, \"action\": \"./apple2.sh\", \"params\": \"$f\", \"exitmenu\": true, \"status\": false}"
     PRIORITY=$((PRIORITY + 1))
 done
 
-cat >> menu.json << 'FOOTER'
+if [ $PRIORITY -eq 0 ]; then
+    echo "No disk images found in disks/"
+    exit 1
+fi
+
+cat > menu.json << EOF
+{
+    "items": [
+        {
+            "name": "Games",
+            "items": [$ITEMS
+            ]
+        }
     ]
 }
-FOOTER
+EOF
 
 echo "Generated menu.json with $PRIORITY game(s)"
