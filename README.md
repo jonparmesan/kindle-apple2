@@ -106,10 +106,7 @@ You can also press **Ctrl+C** for an immediate exit without the prompt.
 
 ### Game-specific controls
 
-Most Apple II games tell you the controls on screen. Common patterns:
-- **Oregon Trail**: Number keys (1-4) to select menu options, Y/N for yes/no prompts, Enter to continue
-- **Text adventures**: Type commands and press Enter
-- **Strategy games**: Usually arrow keys + Enter, or letter/number selection
+Most Apple II games display their controls on screen.
 
 ## Supported Disk Formats
 
