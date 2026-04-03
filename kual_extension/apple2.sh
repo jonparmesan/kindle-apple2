@@ -6,9 +6,18 @@ LOG="/mnt/us/extensions/Apple2/apple2.log"
 
 # Log everything
 echo "=== $(date) ===" >> "$LOG"
-echo "Disk: $1" >> "$LOG"
+echo "Args: $*" >> "$LOG"
 
-DISK1="$1"
+# Parse arguments: extract flags (--mono) and disk path
+FLAGS=""
+DISK1=""
+for arg in "$@"; do
+    case "$arg" in
+        --*) FLAGS="$FLAGS $arg" ;;
+        *)   [ -z "$DISK1" ] && DISK1="$arg" ;;
+    esac
+done
+
 if [ -z "$DISK1" ]; then
     for f in disks/*.do disks/*.dsk disks/*.nib disks/*.woz disks/*.po; do
         if [ -f "$f" ]; then
@@ -25,7 +34,7 @@ if [ -z "$DISK1" ] || [ ! -f "$DISK1" ]; then
     exit 1
 fi
 
-echo "Loading: $DISK1" >> "$LOG"
+echo "Loading: $DISK1 (flags:$FLAGS)" >> "$LOG"
 
 # Suspend Kindle UI
 lipc-set-prop com.lab126.powerd preventScreenSaver 1 2>/dev/null
@@ -38,7 +47,7 @@ sleep 1
 # Launch via kterm — redirect ALL output to log
 FULL_PATH="/mnt/us/extensions/Apple2/$DISK1"
 /mnt/us/extensions/kterm/bin/kterm \
-  -e "/mnt/us/extensions/Apple2/apple2 $FULL_PATH" \
+  -e "/mnt/us/extensions/Apple2/apple2$FLAGS $FULL_PATH" \
   >> "$LOG" 2>&1
 
 echo "Exit code: $?" >> "$LOG"
