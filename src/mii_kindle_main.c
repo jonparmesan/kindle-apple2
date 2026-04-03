@@ -75,8 +75,8 @@ main(int argc, const char *argv[])
 	signal(SIGABRT, crashhandler);
 	signal(SIGFPE, crashhandler);
 
-	/* Open log file directly */
-	FILE *logf = fopen("/mnt/us/extensions/Apple2/apple2.log", "w");
+	/* Open log file — APPEND so script-level logs aren't overwritten */
+	FILE *logf = fopen("/mnt/us/extensions/Apple2/apple2.log", "a");
 	if (logf) {
 		dup2(fileno(logf), STDERR_FILENO);
 		fclose(logf);

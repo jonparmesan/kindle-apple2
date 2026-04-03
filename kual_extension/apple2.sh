@@ -2,10 +2,15 @@
 # Apple IIe Emulator for Kindle — KUAL Extension
 cd "$(dirname "$0")"
 
-# Disk image path passed as argument, or auto-detect first disk
+LOG="/mnt/us/extensions/Apple2/apple2.log"
+
+# Log everything
+echo "=== $(date) ===" >> "$LOG"
+echo "Disk: $1" >> "$LOG"
+
 DISK1="$1"
 if [ -z "$DISK1" ]; then
-    for f in disks/*.do disks/*.dsk disks/*.nib disks/*.woz; do
+    for f in disks/*.do disks/*.dsk disks/*.nib disks/*.woz disks/*.po; do
         if [ -f "$f" ]; then
             DISK1="$f"
             break
@@ -14,13 +19,15 @@ if [ -z "$DISK1" ]; then
 fi
 
 if [ -z "$DISK1" ] || [ ! -f "$DISK1" ]; then
+    echo "ERROR: No disk image found: $1" >> "$LOG"
     eips 5 20 "No disk image found"
-    eips 5 22 "Place .do/.dsk files in disks/ folder"
     sleep 3
     exit 1
 fi
 
-# Suspend Kindle UI but keep X11 running for kterm
+echo "Loading: $DISK1" >> "$LOG"
+
+# Suspend Kindle UI
 lipc-set-prop com.lab126.powerd preventScreenSaver 1 2>/dev/null
 lipc-set-prop com.lab126.pillow disableEnablePillow disable 2>/dev/null
 killall -STOP cvm 2>/dev/null
@@ -28,10 +35,14 @@ killall -STOP cvm 2>/dev/null
 eips -f -c 2>/dev/null
 sleep 1
 
-# Launch via kterm (provides the on-screen keyboard)
+# Launch via kterm — redirect ALL output to log
 FULL_PATH="/mnt/us/extensions/Apple2/$DISK1"
 /mnt/us/extensions/kterm/bin/kterm \
-  -e "/mnt/us/extensions/Apple2/apple2 $FULL_PATH"
+  -e "/mnt/us/extensions/Apple2/apple2 $FULL_PATH" \
+  >> "$LOG" 2>&1
+
+echo "Exit code: $?" >> "$LOG"
+echo "=== done ===" >> "$LOG"
 
 # Restore Kindle UI
 killall -CONT cvm 2>/dev/null
