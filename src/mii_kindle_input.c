@@ -34,6 +34,12 @@ kindle_input_set_disk_dir(const char *dir)
 	fprintf(stderr, "kindle_input: disk dir set to '%s'\n", disk_dir);
 }
 
+void
+kindle_input_set_current_disk(const char *basename)
+{
+	snprintf(current_disk_name, sizeof(current_disk_name), "%s", basename);
+}
+
 /* Check if filename has a supported disk image extension */
 static int
 is_disk_image(const char *name)
@@ -92,13 +98,8 @@ format_display_name(const char *filename, char *out, int out_size)
 }
 
 static void
-show_disk_menu(void)
+redraw_disk_menu(void)
 {
-	scan_disk_dir();
-	disk_menu_page = 0;
-	disk_menu_drive = 0;
-	disk_menu_showing = 1;
-
 	/* Draw a white box over the game area */
 	int sw = kindle_fb_get_xres();
 	int gh = kindle_fb_get_game_h();
@@ -159,6 +160,16 @@ show_disk_menu(void)
 }
 
 static void
+show_disk_menu(void)
+{
+	scan_disk_dir();
+	disk_menu_page = 0;
+	disk_menu_drive = 0;
+	disk_menu_showing = 1;
+	redraw_disk_menu();
+}
+
+static void
 hide_disk_menu(void)
 {
 	write(STDOUT_FILENO, "\033[2J\033[H", 7);
@@ -177,7 +188,7 @@ handle_disk_menu_key(mii_t *mii, unsigned char ch)
 	/* Tab → toggle target drive */
 	if (ch == 0x09) {
 		disk_menu_drive = !disk_menu_drive;
-		show_disk_menu(); /* redraw with new drive */
+		redraw_disk_menu(); /* redraw without resetting page */
 		return;
 	}
 
@@ -186,7 +197,7 @@ handle_disk_menu_key(mii_t *mii, unsigned char ch)
 		int total_pages = (disk_file_count + 8) / 9;
 		if (disk_menu_page < total_pages - 1) {
 			disk_menu_page++;
-			show_disk_menu();
+			redraw_disk_menu();
 		}
 		return;
 	}
@@ -194,7 +205,7 @@ handle_disk_menu_key(mii_t *mii, unsigned char ch)
 	/* < or , → previous page */
 	if ((ch == '<' || ch == ',') && disk_menu_page > 0) {
 		disk_menu_page--;
-		show_disk_menu();
+		redraw_disk_menu();
 		return;
 	}
 

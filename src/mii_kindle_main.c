@@ -155,6 +155,11 @@ main(int argc, const char *argv[])
 		fprintf(stderr, "Failed to load disk 1: %s\n", disk1_path);
 		return 1;
 	}
+	/* Set current disk name for the swap menu header */
+	{
+		const char *bn = strrchr(disk1_path, '/');
+		kindle_input_set_current_disk(bn ? bn + 1 : disk1_path);
+	}
 	if (disk2_path) {
 		if (mii_slot_command(&mii, 6, MII_SLOT_DRIVE_LOAD + 1, (void*)disk2_path) < 0) {
 			fprintf(stderr, "Failed to load disk 2: %s\n", disk2_path);
