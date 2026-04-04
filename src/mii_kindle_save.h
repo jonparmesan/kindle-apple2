@@ -5,6 +5,8 @@
 
 #include "mii.h"
 
+#define KINDLE_SAVES_DIR "/mnt/us/extensions/Apple2/saves"
+
 /*
  * Save complete emulator state to a file.
  * Returns 0 on success, -1 on failure.

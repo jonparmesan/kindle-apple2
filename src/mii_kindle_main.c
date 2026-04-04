@@ -254,10 +254,10 @@ main(int argc, const char *argv[])
 
 			/* Update status bar if content changed */
 			{
-				mii_floppy_t *f = NULL;
+				mii_floppy_t *floppies[2] = {NULL, NULL};
 				mii_slot_command(&mii, 6,
-					MII_SLOT_D2_GET_FLOPPY + 0, (void*)&f);
-				int motor = (f && f->motor);
+					MII_SLOT_D2_GET_FLOPPY + 0, (void*)floppies);
+				int motor = (floppies[0] && floppies[0]->motor);
 				char status[64];
 				snprintf(status, sizeof(status), "%s  %s",
 					motor ? "[DISK]" : "      ",
@@ -291,7 +291,7 @@ main(int argc, const char *argv[])
 	/* Save state if requested */
 	if (kindle_input_save_requested() && have_save_path) {
 		/* Ensure saves directory exists */
-		if (mkdir("/mnt/us/extensions/Apple2/saves", 0755) < 0
+		if (mkdir(KINDLE_SAVES_DIR, 0755) < 0
 				&& errno != EEXIST) {
 			fprintf(stderr, "kindle-apple2: cannot create saves dir: %s\n",
 				strerror(errno));

@@ -19,7 +19,7 @@
 #include <sys/stat.h>
 
 #define SAVE_MAGIC		0x4D494953	/* "MIIS" */
-#define SAVE_VERSION	2
+#define SAVE_VERSION	3
 
 /*
  * Save file layout (little-endian, ARM Kindle only):
@@ -42,6 +42,8 @@
  * Version history:
  *   v1: Initial format
  *   v2: Added seed_dirty/seed_saved per floppy drive (dirty-track detection)
+ *   v3: Added lss_prev_state, lss_skip, clock, iwm_mode, timer_off, timer_lss
+ *       to Disk II controller (write-safety across save/restore)
  */
 
 typedef struct {
@@ -145,6 +147,13 @@ kindle_save_state(mii_t *mii, const char *save_path)
 		if (write_u8(f, d2->lss_state) < 0) goto fail;
 		if (write_u8(f, d2->lss_mode) < 0) goto fail;
 		if (write_u8(f, d2->data_register) < 0) goto fail;
+		/* v3: additional controller state for write-safety */
+		if (write_u8(f, d2->lss_prev_state) < 0) goto fail;
+		if (write_u8(f, d2->lss_skip) < 0) goto fail;
+		if (write_all(f, &d2->clock, 2) < 0) goto fail;
+		if (write_u8(f, d2->iwm_mode) < 0) goto fail;
+		if (write_u8(f, d2->timer_off) < 0) goto fail;
+		if (write_u8(f, d2->timer_lss) < 0) goto fail;
 
 		for (int drv = 0; drv < 2; drv++) {
 			mii_floppy_t *fl = &d2->floppy[drv];
@@ -167,6 +176,9 @@ kindle_save_state(mii_t *mii, const char *save_path)
 		}
 	}
 
+	/* Flush to storage before rename — Kindle uses FAT, no journaling */
+	fflush(f);
+	fsync(fileno(f));
 	fclose(f);
 
 	/* Atomic replace: rename temp file over the real save path */
@@ -262,8 +274,10 @@ kindle_load_state(mii_t *mii, const char *save_path)
 		if (mii->slot[5].drv_priv)
 			d2 = (mii_card_disk2_t *)mii->slot[5].drv_priv;
 
-		/* Calculate size of v1 disk section to skip if no driver */
-		size_t disk_ctrl_size = 6;
+		/* Calculate size of disk section to skip if no driver */
+		size_t disk_ctrl_v1 = 6;
+		size_t disk_ctrl_v3 = disk_ctrl_v1 + 7; /* +lss_prev,skip,clock(2),iwm,timer_off,timer_lss */
+		size_t disk_ctrl_size = (hdr.version >= 3) ? disk_ctrl_v3 : disk_ctrl_v1;
 		size_t per_track = 1 + 4 + MII_FLOPPY_MAX_TRACK_SIZE;
 		size_t per_drive_v1 = 1 + 1 + 4 + 1 + 1 +
 			(MII_FLOPPY_TRACK_COUNT * per_track);
@@ -280,6 +294,15 @@ kindle_load_state(mii_t *mii, const char *save_path)
 				if (read_u8(f, &v) < 0) goto fail; d2->lss_state = v;
 				if (read_u8(f, &v) < 0) goto fail; d2->lss_mode = v;
 				if (read_u8(f, &v) < 0) goto fail; d2->data_register = v;
+				/* v3: additional controller state */
+				if (hdr.version >= 3) {
+					if (read_u8(f, &v) < 0) goto fail; d2->lss_prev_state = v;
+					if (read_u8(f, &v) < 0) goto fail; d2->lss_skip = v;
+					if (read_all(f, &d2->clock, 2) < 0) goto fail;
+					if (read_u8(f, &v) < 0) goto fail; d2->iwm_mode = v;
+					if (read_u8(f, &v) < 0) goto fail; d2->timer_off = v;
+					if (read_u8(f, &v) < 0) goto fail; d2->timer_lss = v;
+				}
 			}
 
 			for (int drv = 0; drv < 2; drv++) {
@@ -298,6 +321,21 @@ kindle_load_state(mii_t *mii, const char *save_path)
 					if (read_all(f, fl->track_data[t],
 							MII_FLOPPY_MAX_TRACK_SIZE) < 0) goto fail;
 					fl->tracks[t].virgin = 0;
+					/* Clamp bit_count to valid range */
+					if (fl->tracks[t].bit_count > MII_FLOPPY_MAX_TRACK_SIZE * 8)
+						fl->tracks[t].bit_count = MII_FLOPPY_MAX_TRACK_SIZE * 8;
+				}
+
+				/* Clamp floppy values to prevent OOB from corrupt saves */
+				uint8_t max_qt = (MII_FLOPPY_TRACK_COUNT * 4) - 1;
+				if (fl->qtrack > max_qt)
+					fl->qtrack = max_qt;
+				/* Clamp bit_position against the current track's bit_count */
+				{
+					int tid = fl->track_id[fl->qtrack];
+					uint32_t bc = fl->tracks[tid].bit_count;
+					if (bc == 0 || fl->bit_position >= bc)
+						fl->bit_position = 0;
 				}
 
 				/* v2: dirty-tracking seeds */
@@ -344,7 +382,7 @@ kindle_save_path_for_disk(const char *disk_path, char *buf, int buf_size)
 
 	/* Build path */
 	int n = snprintf(buf, buf_size,
-		"/mnt/us/extensions/Apple2/saves/%s.sav", name);
+		KINDLE_SAVES_DIR "/%s.sav", name);
 	if (n < 0 || n >= buf_size)
 		return NULL;
 

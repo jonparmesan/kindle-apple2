@@ -14,7 +14,7 @@
 #include <strings.h>
 #include <dirent.h>
 #include <unistd.h>
-#include <fcntl.h>
+#include <sys/select.h>
 
 static char disk_names[KINDLE_MAX_DISKS][64];
 static char disk_paths[KINDLE_MAX_DISKS][256];
@@ -101,13 +101,13 @@ draw_disk_overlay(int selected, int scroll, int drive, int visible)
 	/* Title */
 	int ts = (scale >= 4) ? 3 : 2;
 	const char *title = "Select Disk";
-	int tw = 11 * 6 * ts;
+	int tw = kindle_fb_text_width(title, ts);
 	kindle_fb_draw_text((sw - tw) / 2, 5, title, 0x00, ts);
 
 	/* Drive indicator */
 	char drv_str[16];
 	snprintf(drv_str, sizeof(drv_str), "Drive: D%d", drive + 1);
-	int dw = (int)strlen(drv_str) * 6 * fs;
+	int dw = kindle_fb_text_width(drv_str, fs);
 	kindle_fb_draw_text((sw - dw) / 2, 5 + ts * 10, drv_str, 0x60, fs);
 
 	/* List items */
@@ -134,10 +134,10 @@ draw_disk_overlay(int selected, int scroll, int drive, int visible)
 
 	/* Footer */
 	const char *footer = "Up/Dn=Select Enter=Load D=Drive ESC=Cancel";
-	int fw = (int)strlen(footer) * 6 * fs;
+	int fw = kindle_fb_text_width(footer, fs);
 	if (fw > sw - 10) {
 		footer = "Arrows/Enter/D/ESC";
-		fw = (int)strlen(footer) * 6 * fs;
+		fw = kindle_fb_text_width(footer, fs);
 	}
 	kindle_fb_draw_text((sw - fw) / 2, gh - fs * 10, footer, 0x80, fs);
 
@@ -163,18 +163,22 @@ kindle_disks_show_overlay(int *drive)
 	if (visible > disk_count) visible = disk_count;
 	if (visible < 1) visible = 1;
 
-	/* Set stdin to blocking for the overlay */
-	int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
-	fcntl(STDIN_FILENO, F_SETFL, flags & ~O_NONBLOCK);
-
 	draw_disk_overlay(selected, scroll, drv, visible);
 
-	while (1) {
+	/* Use select() instead of blocking read so signals can interrupt */
+	extern volatile int running; /* from mii_kindle_main.c */
+
+	while (running) {
+		fd_set fds;
+		struct timeval tv = { .tv_sec = 0, .tv_usec = 100000 }; /* 100ms */
+		FD_ZERO(&fds);
+		FD_SET(STDIN_FILENO, &fds);
+		int ready = select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv);
+		if (ready <= 0) continue; /* timeout or signal — check running */
+
 		unsigned char buf[8];
 		int n = read(STDIN_FILENO, buf, sizeof(buf));
 		if (n <= 0) {
-			/* EOF or error — stdin closed, bail out */
-			fcntl(STDIN_FILENO, F_SETFL, flags);
 			*drive = drv;
 			return -1;
 		}
@@ -195,15 +199,12 @@ kindle_disks_show_overlay(int *drive)
 				}
 				i += 2;
 			} else if (ch == 0x1B) {
-				fcntl(STDIN_FILENO, F_SETFL, flags);
 				*drive = drv;
 				return -1;
 			} else if (ch == 0x03) {
-				fcntl(STDIN_FILENO, F_SETFL, flags);
 				*drive = drv;
 				return -1;
 			} else if (ch == 0x0D || ch == 0x0A) {
-				fcntl(STDIN_FILENO, F_SETFL, flags);
 				*drive = drv;
 				return selected;
 			} else if (ch == 'd' || ch == 'D') {
@@ -212,7 +213,6 @@ kindle_disks_show_overlay(int *drive)
 			} else if (ch >= '1' && ch <= '9') {
 				int idx = ch - '1';
 				if (idx < disk_count) {
-					fcntl(STDIN_FILENO, F_SETFL, flags);
 					*drive = drv;
 					return idx;
 				}
@@ -226,6 +226,10 @@ kindle_disks_show_overlay(int *drive)
 				draw_disk_overlay(selected, scroll, drv, visible);
 		}
 	}
+
+	/* Signal interrupted us */
+	*drive = drv;
+	return -1;
 }
 
 int

@@ -456,9 +456,7 @@ int
 kindle_fb_text_width(const char *str, int font_scale)
 {
 	if (!str) return 0;
-	int len = 0;
-	while (*str++) len++;
-	return len * 6 * font_scale;
+	return (int)strlen(str) * 6 * font_scale;
 }
 
 void
