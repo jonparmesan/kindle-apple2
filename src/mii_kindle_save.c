@@ -3,6 +3,8 @@
  *
  * Saves CPU registers, soft switch state, RAM contents, video state,
  * and Disk II controller + floppy state to a binary file.
+ *
+ * Save format assumes little-endian byte order (ARM Kindle).
  */
 #include "mii_kindle_save.h"
 #include "mii_video.h"
@@ -12,14 +14,16 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include <errno.h>
 #include <sys/stat.h>
 
 #define SAVE_MAGIC		0x4D494953	/* "MIIS" */
-#define SAVE_VERSION	1
+#define SAVE_VERSION	2
 
 /*
- * Save file layout (all little-endian):
+ * Save file layout (little-endian, ARM Kindle only):
+ *
  *   Header:  magic(4) version(4) flags(4) reserved(4)
  *   CPU:     A(1) X(1) Y(1) S(1) PC(2) P(1) IR(1) IRQ(1) cycle(1) total_cycle(8)
  *   State:   sw_state(4) mem_dirty(4) mem[256](256 bytes)
@@ -33,6 +37,11 @@
  *              motor(1) qtrack(1) bit_position(4) stepper(1) write_protected(1)
  *              For each track 0..34:
  *                dirty(1) bit_count(4) track_data(MII_FLOPPY_MAX_TRACK_SIZE)
+ *              [v2+] seed_dirty(4) seed_saved(4)
+ *
+ * Version history:
+ *   v1: Initial format
+ *   v2: Added seed_dirty/seed_saved per floppy drive (dirty-track detection)
  */
 
 typedef struct {
@@ -63,9 +72,14 @@ read_u8(FILE *f, uint8_t *v) { return read_all(f, v, 1); }
 int
 kindle_save_state(mii_t *mii, const char *save_path)
 {
-	FILE *f = fopen(save_path, "wb");
+	/* Write to a temp file and rename on success to avoid
+	 * leaving a corrupt .sav if we crash or run out of space. */
+	char tmp_path[520];
+	snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", save_path);
+
+	FILE *f = fopen(tmp_path, "wb");
 	if (!f) {
-		fprintf(stderr, "save: cannot open %s: %s\n", save_path, strerror(errno));
+		fprintf(stderr, "save: cannot open %s: %s\n", tmp_path, strerror(errno));
 		return -1;
 	}
 
@@ -146,16 +160,30 @@ kindle_save_state(mii_t *mii, const char *save_path)
 				if (write_all(f, fl->track_data[t],
 						MII_FLOPPY_MAX_TRACK_SIZE) < 0) goto fail;
 			}
+
+			/* v2: dirty-tracking seeds */
+			if (write_all(f, &fl->seed_dirty, 4) < 0) goto fail;
+			if (write_all(f, &fl->seed_saved, 4) < 0) goto fail;
 		}
 	}
 
 	fclose(f);
+
+	/* Atomic replace: rename temp file over the real save path */
+	if (rename(tmp_path, save_path) < 0) {
+		fprintf(stderr, "save: rename %s -> %s failed: %s\n",
+			tmp_path, save_path, strerror(errno));
+		unlink(tmp_path);
+		return -1;
+	}
+
 	fprintf(stderr, "save: state saved to %s\n", save_path);
 	return 0;
 
 fail:
-	fprintf(stderr, "save: write error to %s: %s\n", save_path, strerror(errno));
+	fprintf(stderr, "save: write error to %s: %s\n", tmp_path, strerror(errno));
 	fclose(f);
+	unlink(tmp_path);
 	return -1;
 }
 
@@ -169,9 +197,15 @@ kindle_load_state(mii_t *mii, const char *save_path)
 	/* Header */
 	save_header_t hdr;
 	if (read_all(f, &hdr, sizeof(hdr)) < 0) goto fail;
-	if (hdr.magic != SAVE_MAGIC || hdr.version != SAVE_VERSION) {
-		fprintf(stderr, "save: bad header in %s (magic=%08x ver=%d)\n",
-			save_path, hdr.magic, hdr.version);
+	if (hdr.magic != SAVE_MAGIC) {
+		fprintf(stderr, "save: bad magic in %s (%08x)\n",
+			save_path, hdr.magic);
+		fclose(f);
+		return -1;
+	}
+	if (hdr.version > SAVE_VERSION) {
+		fprintf(stderr, "save: version %d too new (max %d) in %s\n",
+			hdr.version, SAVE_VERSION, save_path);
 		fclose(f);
 		return -1;
 	}
@@ -215,7 +249,7 @@ kindle_load_state(mii_t *mii, const char *save_path)
 			if (read_all(f, bank->mem, sz) < 0) goto fail;
 		} else if (pages > 0) {
 			/* Skip mismatched bank data */
-			fseek(f, (long)pages * 256, SEEK_CUR);
+			if (fseek(f, (long)pages * 256, SEEK_CUR) != 0) goto fail;
 		}
 	}
 
@@ -228,10 +262,13 @@ kindle_load_state(mii_t *mii, const char *save_path)
 		if (mii->slot[5].drv_priv)
 			d2 = (mii_card_disk2_t *)mii->slot[5].drv_priv;
 
-		/* Calculate size of disk section to skip if no driver */
-		size_t disk_ctrl_size = 6; /* selected + write_reg + head + lss_state + lss_mode + data_reg */
+		/* Calculate size of v1 disk section to skip if no driver */
+		size_t disk_ctrl_size = 6;
 		size_t per_track = 1 + 4 + MII_FLOPPY_MAX_TRACK_SIZE;
-		size_t per_drive = 1 + 1 + 4 + 1 + 1 + (MII_FLOPPY_TRACK_COUNT * per_track);
+		size_t per_drive_v1 = 1 + 1 + 4 + 1 + 1 +
+			(MII_FLOPPY_TRACK_COUNT * per_track);
+		size_t per_drive_v2 = per_drive_v1 + 4 + 4; /* + seed_dirty + seed_saved */
+		size_t per_drive = (hdr.version >= 2) ? per_drive_v2 : per_drive_v1;
 		size_t disk_total = disk_ctrl_size + 2 * per_drive;
 
 		if (d2) {
@@ -262,17 +299,26 @@ kindle_load_state(mii_t *mii, const char *save_path)
 							MII_FLOPPY_MAX_TRACK_SIZE) < 0) goto fail;
 					fl->tracks[t].virgin = 0;
 				}
+
+				/* v2: dirty-tracking seeds */
+				if (hdr.version >= 2) {
+					if (read_all(f, &fl->seed_dirty, 4) < 0) goto fail;
+					if (read_all(f, &fl->seed_saved, 4) < 0) goto fail;
+				} else {
+					/* v1: no seed data, assume clean */
+					fl->seed_dirty = fl->seed_saved;
+				}
 			}
 		} else {
 			/* No driver loaded — skip disk data */
-			fseek(f, (long)disk_total, SEEK_CUR);
+			if (fseek(f, (long)disk_total, SEEK_CUR) != 0) goto fail;
 		}
 	}
 
 	fclose(f);
 	/* Force a video refresh */
 	mii->video.frame_seed++;
-	fprintf(stderr, "save: state loaded from %s\n", save_path);
+	fprintf(stderr, "save: state loaded from %s (v%d)\n", save_path, hdr.version);
 	return 0;
 
 fail:
