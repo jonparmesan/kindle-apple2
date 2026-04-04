@@ -77,6 +77,44 @@ main(int argc, const char *argv[])
 		return 1;
 	}
 
+	/* Extract disk directory for runtime disk swapping (Ctrl-D menu) */
+	char disk_dir[256];
+	strncpy(disk_dir, disk1_path, sizeof(disk_dir) - 1);
+	disk_dir[sizeof(disk_dir) - 1] = '\0';
+	char *last_slash = strrchr(disk_dir, '/');
+	if (last_slash) *last_slash = '\0';
+	else strcpy(disk_dir, ".");
+	kindle_input_set_disk_dir(disk_dir);
+
+	/* Auto-detect paired disk (Side_A → Side_B, Disk_1 → Disk_2, etc.) */
+	static char auto_disk2[512];
+	if (!disk2_path) {
+		const char *base = last_slash ? last_slash + 1 : disk1_path;
+		static const char *patterns[][2] = {
+			{"Side_A", "Side_B"}, {"Side_B", "Side_A"},
+			{"side_a", "side_b"}, {"side_b", "side_a"},
+			{"Disk_1", "Disk_2"}, {"Disk_2", "Disk_1"},
+			{"disk_1", "disk_2"}, {"disk_2", "disk_1"},
+			{"_A.",    "_B."},    {"_B.",    "_A."},
+			{"_1.",    "_2."},    {"_2.",    "_1."},
+			{NULL, NULL}
+		};
+		for (int i = 0; patterns[i][0]; i++) {
+			const char *found = strstr(base, patterns[i][0]);
+			if (found) {
+				int prefix_len = (int)(found - base);
+				int pat_len = strlen(patterns[i][0]);
+				snprintf(auto_disk2, sizeof(auto_disk2), "%s/%.*s%s%s",
+					disk_dir, prefix_len, base,
+					patterns[i][1], found + pat_len);
+				if (access(auto_disk2, R_OK) == 0) {
+					disk2_path = auto_disk2;
+				}
+				break;
+			}
+		}
+	}
+
 	signal(SIGINT, sighandler);
 	signal(SIGTERM, sighandler);
 	signal(SIGSEGV, crashhandler);
@@ -144,6 +182,14 @@ main(int argc, const char *argv[])
 
 	/* Initialize keyboard input (stdin from kterm) */
 	kindle_input_init();
+
+	/* Show startup hint if multi-disk game detected */
+	if (disk2_path) {
+		write(STDOUT_FILENO,
+			"\n  Disk 2 loaded. Press Ctrl-D to swap disks.\n", 46);
+		fprintf(stderr, "kindle-apple2: auto-paired disk 2: %s\n",
+			disk2_path);
+	}
 
 	fprintf(stderr, "kindle-apple2: running (mode=%s)\n",
 		force_mono ? "mono" : "dithered");

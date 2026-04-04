@@ -89,6 +89,7 @@ The emulator uses **kterm's on-screen keyboard** which appears at the bottom of 
 | Enter/Return | Confirm selection, advance text |
 | Space | Space bar |
 | ESC | **Shows exit dialog** (see below) |
+| Ctrl+D | **Opens disk swap menu** (see below) |
 | Ctrl+C | Immediate exit to Kindle |
 
 ### Exiting the emulator
@@ -103,6 +104,25 @@ Exit to Kindle?  Y / N
 - Press **N** or **ESC** again to resume playing
 
 You can also press **Ctrl+C** for an immediate exit without the prompt.
+
+### Swapping disks
+
+Many Apple II games shipped on multiple disk sides. When a game asks you to "flip the diskette" or "insert side B," press **Ctrl+D** to open the disk swap menu. This shows all disk images in your `disks/` folder:
+
+```
+SWAP DISK (Drive 1)  [Oregon_Trail_Side_A.do]
+1) Oregon Trail Side A
+2) Oregon Trail Side B
+3) Lode Runner
+Tab: Drive 2  ESC: Cancel
+```
+
+- Press **1-9** to select a disk image
+- Press **Tab** to switch between Drive 1 and Drive 2 (for games that use two drives)
+- Press **>** or **<** to page through larger collections
+- Press **ESC** to cancel and return to the game
+
+After selecting a disk, the game resumes with the new disk loaded.
 
 ### Game-specific controls
 
