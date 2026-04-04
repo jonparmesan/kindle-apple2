@@ -54,7 +54,7 @@ struct mxcfb_update_data51 {
 
 /* Framebuffer state */
 static u8 *fb0 = NULL;
-static int fdFB = 0;
+static int fdFB = -1;
 static u32 fb_stride = 0;
 static u32 fb_xres = 0;
 static u32 fb_yres = 0;
@@ -455,6 +455,7 @@ kindle_fb_draw_text(int x, int y, const char *str, uint8_t color,
 int
 kindle_fb_text_width(const char *str, int font_scale)
 {
+	if (!str) return 0;
 	int len = 0;
 	while (*str++) len++;
 	return len * 6 * font_scale;
@@ -590,7 +591,7 @@ kindle_fb_close(void)
 		munmap(fb0, fb_yres * fb_stride);
 	}
 	fb0 = NULL;
-	if (fdFB > 0)
+	if (fdFB >= 0)
 		close(fdFB);
 	fdFB = -1;
 }
