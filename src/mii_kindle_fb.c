@@ -421,7 +421,6 @@ kindle_fb_draw_text(int x, int y, const char *str, uint8_t color,
 	if (font_scale < 1) font_scale = 1;
 
 	int char_w = 6 * font_scale; /* 5 pixels + 1 spacing */
-	int char_h = 8 * font_scale; /* 7 pixels + 1 spacing */
 	int cx = x;
 
 	for (; *str; str++) {
@@ -445,9 +444,8 @@ kindle_fb_draw_text(int x, int y, const char *str, uint8_t color,
 	}
 }
 
-/* Measure text width in pixels */
-static int
-text_width(const char *str, int font_scale)
+int
+kindle_fb_text_width(const char *str, int font_scale)
 {
 	int len = 0;
 	while (*str++) len++;
@@ -476,27 +474,27 @@ kindle_fb_draw_splash(const char *disk_name, int mono)
 
 	/* Title: "Apple IIe" centered */
 	const char *title = "Apple IIe";
-	int tw = text_width(title, title_scale);
+	int tw = kindle_fb_text_width(title, title_scale);
 	int tx = ((int)fb_xres - tw) / 2;
 	int ty = game_h / 4;
 	kindle_fb_draw_text(tx, ty, title, 0x00, title_scale);
 
 	/* Disk name centered below title */
-	int nw = text_width(base, info_scale);
+	int nw = kindle_fb_text_width(base, info_scale);
 	int nx = ((int)fb_xres - nw) / 2;
 	int ny = ty + title_scale * 10;
 	kindle_fb_draw_text(nx, ny, base, 0x40, info_scale);
 
 	/* "Booting from disk..." centered below */
 	const char *boot_msg = "Booting from disk...";
-	int bw = text_width(boot_msg, small_scale);
+	int bw = kindle_fb_text_width(boot_msg, small_scale);
 	int bx = ((int)fb_xres - bw) / 2;
 	int by = ny + info_scale * 12;
 	kindle_fb_draw_text(bx, by, boot_msg, 0x80, small_scale);
 
 	/* Mode indicator */
 	const char *mode = mono ? "[MONO]" : "[GRAY]";
-	int mw = text_width(mode, small_scale);
+	int mw = kindle_fb_text_width(mode, small_scale);
 	int mx = ((int)fb_xres - mw) / 2;
 	int my = by + small_scale * 12;
 	kindle_fb_draw_text(mx, my, mode, 0xA0, small_scale);
@@ -527,13 +525,13 @@ kindle_fb_draw_error(const char *message)
 
 	/* "ERROR" title */
 	const char *err_title = "ERROR";
-	int ew = text_width(err_title, err_scale);
+	int ew = kindle_fb_text_width(err_title, err_scale);
 	int ex = ((int)fb_xres - ew) / 2;
 	int ey = by + bh / 4;
 	kindle_fb_draw_text(ex, ey, err_title, 0x00, err_scale);
 
 	/* Error message */
-	int mw = text_width(message, msg_scale);
+	int mw = kindle_fb_text_width(message, msg_scale);
 	int mx = ((int)fb_xres - mw) / 2;
 	/* Clamp to box width */
 	if (mx < bx + 10) mx = bx + 10;
@@ -567,7 +565,7 @@ kindle_fb_draw_status(const char *text)
 
 	/* Draw text centered */
 	int s = (bar_h > 20) ? 2 : 1;
-	int tw = text_width(text, s);
+	int tw = kindle_fb_text_width(text, s);
 	int tx = ((int)fb_xres - tw) / 2;
 	int ty = bar_y + (bar_h - s * 7) / 2;
 	kindle_fb_draw_text(tx, ty, text, 0x40, s);

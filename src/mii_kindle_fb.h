@@ -54,6 +54,9 @@ int kindle_fb_detect_keyboard_top(void);
 void kindle_fb_draw_text(int x, int y, const char *str, uint8_t color,
 	int font_scale);
 
+/* Measure text width in pixels for a given string and font scale */
+int kindle_fb_text_width(const char *str, int font_scale);
+
 /* Show boot splash screen with game name and "Booting..." message.
  * disk_name: filename of the disk being loaded (basename only)
  * mono: 1 if monochrome mode, 0 if dithered

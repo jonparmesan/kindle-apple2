@@ -32,13 +32,6 @@ is_disk_ext(const char *name)
 		strcasecmp(dot, ".po") == 0);
 }
 
-/* Simple case-insensitive compare for sorting */
-static int
-name_cmp(const void *a, const void *b)
-{
-	return strcasecmp((const char *)a, (const char *)b);
-}
-
 int
 kindle_disks_scan(void)
 {
@@ -50,33 +43,34 @@ kindle_disks_scan(void)
 	}
 
 	disk_count = 0;
+	memset(disk_names, 0, sizeof(disk_names));
+	memset(disk_paths, 0, sizeof(disk_paths));
+
 	struct dirent *ent;
 	while ((ent = readdir(d)) != NULL && disk_count < KINDLE_MAX_DISKS) {
 		if (ent->d_name[0] == '.') continue;
 		if (!is_disk_ext(ent->d_name)) continue;
 
-		strncpy(disk_names[disk_count], ent->d_name,
-			sizeof(disk_names[0]) - 1);
+		snprintf(disk_names[disk_count], sizeof(disk_names[0]),
+			"%s", ent->d_name);
 		snprintf(disk_paths[disk_count], sizeof(disk_paths[0]),
 			"%s/%s", KINDLE_DISKS_DIR, ent->d_name);
 		disk_count++;
 	}
 	closedir(d);
 
-	/* Sort alphabetically */
-	if (disk_count > 1) {
-		/* Sort both arrays together by swapping in parallel */
-		for (int i = 0; i < disk_count - 1; i++) {
-			for (int j = i + 1; j < disk_count; j++) {
-				if (strcasecmp(disk_names[i], disk_names[j]) > 0) {
-					char tmp[256];
-					strncpy(tmp, disk_names[i], sizeof(tmp));
-					strncpy(disk_names[i], disk_names[j], sizeof(disk_names[0]));
-					strncpy(disk_names[j], tmp, sizeof(disk_names[0]));
-					strncpy(tmp, disk_paths[i], sizeof(tmp));
-					strncpy(disk_paths[i], disk_paths[j], sizeof(disk_paths[0]));
-					strncpy(disk_paths[j], tmp, sizeof(disk_paths[0]));
-				}
+	/* Sort alphabetically (bubble sort, max 32 entries) */
+	for (int i = 0; i < disk_count - 1; i++) {
+		for (int j = i + 1; j < disk_count; j++) {
+			if (strcasecmp(disk_names[i], disk_names[j]) > 0) {
+				char tmp_name[64];
+				char tmp_path[256];
+				memcpy(tmp_name, disk_names[i], sizeof(tmp_name));
+				memcpy(disk_names[i], disk_names[j], sizeof(tmp_name));
+				memcpy(disk_names[j], tmp_name, sizeof(tmp_name));
+				memcpy(tmp_path, disk_paths[i], sizeof(tmp_path));
+				memcpy(disk_paths[i], disk_paths[j], sizeof(tmp_path));
+				memcpy(disk_paths[j], tmp_path, sizeof(tmp_path));
 			}
 		}
 	}
@@ -129,7 +123,6 @@ draw_disk_overlay(int selected, int scroll, int drive, int visible)
 		/* Item number and name */
 		char line[80];
 		snprintf(line, sizeof(line), "%2d. %s", idx + 1, disk_names[idx]);
-		/* Truncate if too long */
 		int max_chars = (sw - 40) / (6 * fs);
 		if ((int)strlen(line) > max_chars)
 			line[max_chars] = '\0';
@@ -140,7 +133,6 @@ draw_disk_overlay(int selected, int scroll, int drive, int visible)
 	const char *footer = "Up/Dn=Select Enter=Load D=Drive ESC=Cancel";
 	int fw = (int)strlen(footer) * 6 * fs;
 	if (fw > sw - 10) {
-		/* Shorter footer for narrow screens */
 		footer = "Arrows/Enter/D/ESC";
 		fw = (int)strlen(footer) * 6 * fs;
 	}
@@ -177,13 +169,17 @@ kindle_disks_show_overlay(int *drive)
 	while (1) {
 		unsigned char buf[8];
 		int n = read(STDIN_FILENO, buf, sizeof(buf));
-		if (n <= 0) continue;
+		if (n <= 0) {
+			/* EOF or error — stdin closed, bail out */
+			fcntl(STDIN_FILENO, F_SETFL, flags);
+			*drive = drv;
+			return -1;
+		}
 
 		for (int i = 0; i < n; i++) {
 			unsigned char ch = buf[i];
 			int redraw = 0;
 
-			/* ESC or Ctrl-C = cancel */
 			if (ch == 0x1B && i + 2 < n && buf[i+1] == '[') {
 				/* Arrow keys */
 				switch (buf[i+2]) {
@@ -196,26 +192,21 @@ kindle_disks_show_overlay(int *drive)
 				}
 				i += 2;
 			} else if (ch == 0x1B) {
-				/* ESC alone = cancel */
 				fcntl(STDIN_FILENO, F_SETFL, flags);
 				*drive = drv;
 				return -1;
 			} else if (ch == 0x03) {
-				/* Ctrl-C = cancel */
 				fcntl(STDIN_FILENO, F_SETFL, flags);
 				*drive = drv;
 				return -1;
 			} else if (ch == 0x0D || ch == 0x0A) {
-				/* Enter = select */
 				fcntl(STDIN_FILENO, F_SETFL, flags);
 				*drive = drv;
 				return selected;
 			} else if (ch == 'd' || ch == 'D') {
-				/* Toggle drive */
 				drv = 1 - drv;
 				redraw = 1;
 			} else if (ch >= '1' && ch <= '9') {
-				/* Quick select by number */
 				int idx = ch - '1';
 				if (idx < disk_count) {
 					fcntl(STDIN_FILENO, F_SETFL, flags);

@@ -74,9 +74,9 @@ show_exit_prompt(void)
 	const char *line1 = "Exit to Kindle?";
 	const char *line2 = "S = Save & Exit";
 	const char *line3 = "Y = Exit   N = Resume";
-	int l1w = 15 * 6 * ts;
-	int l2w = 15 * 6 * ss;
-	int l3w = 21 * 6 * ss;
+	int l1w = kindle_fb_text_width(line1, ts);
+	int l2w = kindle_fb_text_width(line2, ss);
+	int l3w = kindle_fb_text_width(line3, ss);
 	int l1x = bx + (bw - l1w) / 2;
 	int l2x = bx + (bw - l2w) / 2;
 	int l3x = bx + (bw - l3w) / 2;
