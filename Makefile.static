@@ -4,6 +4,7 @@ CFLAGS      = -std=gnu99 -Os -Wall
 CFLAGS     += -Isrc -Isrc/format -Isrc/drivers -Isrc/roms
 CFLAGS     += -DMII_65C02_DIRECT_ACCESS=1 -DMII_NO_MISH=1 -DKINDLE
 CFLAGS     += -include endian.h
+CFLAGS     += -MMD -MP
 LDFLAGS     = -static
 
 O           = build-static
@@ -16,7 +17,8 @@ MII_CORE    = mii.c mii_65c02.c mii_65c02_disasm.c mii_65c02_asm.c \
 MII_FMT     = mii_dd.c mii_dsk.c mii_floppy.c mii_nib.c mii_woz.c
 MII_DRV     = mii_disk2.c mii_noslotclock.c
 MII_ROM     = mii_rom_iiee.c mii_rom_iiee_video.c mii_rom_disk2_p5.c
-KINDLE_SRC  = mii_kindle_fb.c mii_kindle_input.c mii_kindle_main.c
+KINDLE_SRC  = mii_kindle_fb.c mii_kindle_input.c mii_kindle_main.c \
+              mii_kindle_save.c mii_kindle_disks.c
 
 SRCS        = $(addprefix src/, $(MII_CORE)) \
               $(addprefix src/format/, $(MII_FMT)) \
@@ -43,6 +45,9 @@ $(O)/%.o: %.c | $(O)
 
 $(O):
 	mkdir -p $@
+
+DEPS = $(OBJS:.o=.d)
+-include $(DEPS)
 
 clean:
 	rm -rf $(O) $(OUTPUT)

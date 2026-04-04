@@ -12,6 +12,8 @@
 #include <signal.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include <sys/stat.h>
+#include <errno.h>
 
 #include "mii.h"
 #include "mii_video.h"
@@ -19,8 +21,11 @@
 #include "mii_slot.h"
 #include "mii_kindle_fb.h"
 #include "mii_kindle_input.h"
+#include "mii_kindle_save.h"
+#include "mii_kindle_disks.h"
+#include "mii_floppy.h"
 
-static volatile int running = 1;
+volatile int running = 1;
 static int g_frame_count = 0;
 
 static void
@@ -56,11 +61,14 @@ main(int argc, const char *argv[])
 	const char *disk1_path = NULL;
 	const char *disk2_path = NULL;
 	int force_mono = 0;
+	int force_fresh = 0;
 
-	/* Parse arguments: optional --mono flag, then disk paths */
+	/* Parse arguments: optional flags, then disk paths */
 	for (int i = 1; i < argc; i++) {
 		if (strcmp(argv[i], "--mono") == 0) {
 			force_mono = 1;
+		} else if (strcmp(argv[i], "--fresh") == 0) {
+			force_fresh = 1;
 		} else if (!disk1_path) {
 			disk1_path = argv[i];
 		} else if (!disk2_path) {
@@ -70,9 +78,10 @@ main(int argc, const char *argv[])
 	if (!disk1_path) {
 		fprintf(stderr,
 			"kindle-apple2 - Apple IIe emulator for Kindle\n"
-			"Usage: %s [--mono] <disk1.do> [disk2.do]\n"
+			"Usage: %s [--mono] [--fresh] <disk1.do> [disk2.do]\n"
 			"\n"
-			"  --mono    Force monochrome rendering (no grayscale dithering)\n",
+			"  --mono    Force monochrome rendering (no grayscale dithering)\n"
+			"  --fresh   Ignore saved state, cold boot from disk\n",
 			argv[0]);
 		return 1;
 	}
@@ -98,6 +107,17 @@ main(int argc, const char *argv[])
 	if (disk2_path)
 		fprintf(stderr, "  Disk 2: %s\n", disk2_path);
 
+	/* --- Initialize Kindle framebuffer first (so we can show errors) --- */
+	int fb_ok = (kindle_fb_init() == 0);
+	if (fb_ok) {
+		fprintf(stderr, "kindle-apple2: framebuffer ok (game_h=%d)\n",
+			kindle_fb_get_game_h());
+		kindle_fb_draw_splash(disk1_path, force_mono);
+	} else {
+		fprintf(stderr, "Failed to init framebuffer\n");
+		return 1;
+	}
+
 	/* --- Initialize emulator --- */
 	mii_t mii = {};
 	uint32_t flags = MII_INIT_SILENT | MII_INIT_NSC;
@@ -107,6 +127,9 @@ main(int argc, const char *argv[])
 	/* Install Disk II in slot 6 */
 	if (mii_slot_drv_register(&mii, 6, "disk2") < 0) {
 		fprintf(stderr, "Failed to register disk2 driver\n");
+		kindle_fb_draw_error("Disk II driver failed");
+		sleep(5);
+		kindle_fb_close();
 		return 1;
 	}
 
@@ -115,6 +138,10 @@ main(int argc, const char *argv[])
 	/* Load disk images */
 	if (mii_slot_command(&mii, 6, MII_SLOT_DRIVE_LOAD + 0, (void*)disk1_path) < 0) {
 		fprintf(stderr, "Failed to load disk 1: %s\n", disk1_path);
+		kindle_fb_draw_error("Failed to load disk image");
+		sleep(5);
+		kindle_fb_close();
+		mii_dispose(&mii);
 		return 1;
 	}
 	if (disk2_path) {
@@ -132,15 +159,27 @@ main(int argc, const char *argv[])
 	if (force_mono)
 		mii.video.monochrome = 1;
 
-	/* --- Initialize Kindle framebuffer --- */
-	if (kindle_fb_init() < 0) {
-		fprintf(stderr, "Failed to init framebuffer\n");
-		mii_dispose(&mii);
-		return 1;
+	/* Try to load saved state (unless --fresh) */
+	char save_path[512];
+	int have_save_path = (kindle_save_path_for_disk(
+		disk1_path, save_path, sizeof(save_path)) != NULL);
+	if (have_save_path) {
+		if (!force_fresh && kindle_load_state(&mii, save_path) == 0) {
+			/*
+			 * mii_reset() set cpu_state.reset=1 which causes the CPU
+			 * to fetch the reset vector instead of continuing from the
+			 * saved PC. Clear it and tell the CPU to start fetching at
+			 * the restored PC.
+			 */
+			mii.cpu_state.raw = 0;
+			mii.cpu_state.addr = mii.cpu.PC;
+			mii.cpu_state.sync = 1;
+			fprintf(stderr, "kindle-apple2: restored from save state\n");
+		}
 	}
 
-	fprintf(stderr, "kindle-apple2: framebuffer ok (game_h=%d)\n",
-		kindle_fb_get_game_h());
+	/* Scan available disk images for runtime switching */
+	kindle_disks_scan();
 
 	/* Initialize keyboard input (stdin from kterm) */
 	kindle_input_init();
@@ -152,6 +191,7 @@ main(int argc, const char *argv[])
 	int last_update_ms = 0;
 	int update_interval_ms = 150; /* ~6-7 fps for e-ink */
 	uint32_t last_frame_seed = 0; /* track video changes */
+	char last_status[64] = "";
 
 	while (running && mii.state == MII_RUNNING) {
 		/* Check for keyboard input */
@@ -161,6 +201,28 @@ main(int argc, const char *argv[])
 		/* If exit prompt is showing, pause emulation and rendering */
 		if (kindle_input_is_paused()) {
 			usleep(50000); /* 50ms */
+			continue;
+		}
+
+		/* Handle disk swap request (Ctrl-D) */
+		if (kindle_input_disk_swap_requested() && kindle_disks_count() > 0) {
+			int drive = 0;
+			int sel = kindle_disks_show_overlay(&drive);
+			if (sel >= 0) {
+				if (kindle_disks_load(&mii, drive, sel) == 0) {
+					char msg[64];
+					snprintf(msg, sizeof(msg), "D%d: %s",
+						drive + 1, kindle_disks_name(sel));
+					kindle_fb_draw_status(msg);
+					kindle_fb_update();
+				} else {
+					kindle_fb_draw_error("Failed to load disk");
+					kindle_fb_update();
+					sleep(2);
+				}
+			}
+			/* Force full redraw after overlay */
+			last_frame_seed = 0;
 			continue;
 		}
 
@@ -190,6 +252,22 @@ main(int argc, const char *argv[])
 				kindle_fb_render_pixels(mii.video.pixels);
 			}
 
+			/* Update status bar if content changed */
+			{
+				mii_floppy_t *floppies[2] = {NULL, NULL};
+				mii_slot_command(&mii, 6,
+					MII_SLOT_D2_GET_FLOPPY + 0, (void*)floppies);
+				int motor = (floppies[0] && floppies[0]->motor);
+				char status[64];
+				snprintf(status, sizeof(status), "%s  %s",
+					motor ? "[DISK]" : "      ",
+					force_mono ? "MONO" : "GRAY");
+				if (strcmp(status, last_status) != 0) {
+					kindle_fb_draw_status(status);
+					snprintf(last_status, sizeof(last_status), "%s", status);
+				}
+			}
+
 			/* Trigger e-ink update */
 			kindle_fb_update();
 
@@ -209,6 +287,25 @@ main(int argc, const char *argv[])
 
 	fprintf(stderr, "kindle-apple2: shutting down (%d frames, PC=$%04X, state=%d)\n",
 		g_frame_count, mii.cpu.PC, mii.state);
+
+	/* Save state if requested */
+	if (kindle_input_save_requested() && have_save_path) {
+		/* Ensure saves directory exists */
+		if (mkdir(KINDLE_SAVES_DIR, 0755) < 0
+				&& errno != EEXIST) {
+			fprintf(stderr, "kindle-apple2: cannot create saves dir: %s\n",
+				strerror(errno));
+		}
+		if (kindle_save_state(&mii, save_path) == 0) {
+			kindle_fb_draw_status("State saved!");
+			kindle_fb_update();
+			usleep(500000); /* show message briefly */
+		} else {
+			kindle_fb_draw_error("Save failed!");
+			kindle_fb_update();
+			sleep(3);
+		}
+	}
 
 	/* --- Cleanup --- */
 	kindle_input_close();
