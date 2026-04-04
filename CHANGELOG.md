@@ -20,6 +20,11 @@ All notable changes to kindle-apple2 will be documented in this file.
 ### Fixed
 - Exit dialog text appeared as terminal text instead of in the on-screen dialog box
 - Cosmetic terminal strip between game and keyboard now used for the status bar
+- Stack corruption in status bar floppy motor check (D2_GET_FLOPPY writes two pointers)
+- Save file validation: corrupt saves no longer cause out-of-bounds access or division by zero
+- Disk overlay now uses select() instead of blocking read, preventing hang on signal
+- Added fsync before rename when saving state for FAT32 power-loss safety
+- Save format bumped to v3 with complete Disk II controller state for write-safe restores
 
 ## [0.2.0.0] - 2026-04-03
 
