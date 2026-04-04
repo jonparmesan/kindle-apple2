@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <errno.h>
 
 #include "mii.h"
 #include "mii_video.h"
@@ -263,7 +264,7 @@ main(int argc, const char *argv[])
 					force_mono ? "MONO" : "GRAY");
 				if (strcmp(status, last_status) != 0) {
 					kindle_fb_draw_status(status);
-					strncpy(last_status, status, sizeof(last_status) - 1);
+					snprintf(last_status, sizeof(last_status), "%s", status);
 				}
 			}
 
@@ -290,7 +291,11 @@ main(int argc, const char *argv[])
 	/* Save state if requested */
 	if (kindle_input_save_requested() && have_save_path) {
 		/* Ensure saves directory exists */
-		mkdir("/mnt/us/extensions/Apple2/saves", 0755);
+		if (mkdir("/mnt/us/extensions/Apple2/saves", 0755) < 0
+				&& errno != EEXIST) {
+			fprintf(stderr, "kindle-apple2: cannot create saves dir: %s\n",
+				strerror(errno));
+		}
 		if (kindle_save_state(&mii, save_path) == 0) {
 			kindle_fb_draw_status("State saved!");
 			kindle_fb_update();

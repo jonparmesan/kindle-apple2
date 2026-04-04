@@ -59,6 +59,9 @@ kindle_disks_scan(void)
 	}
 	closedir(d);
 
+	if (disk_count >= KINDLE_MAX_DISKS)
+		fprintf(stderr, "disks: warning: list truncated at %d\n", KINDLE_MAX_DISKS);
+
 	/* Sort alphabetically (bubble sort, max 32 entries) */
 	for (int i = 0; i < disk_count - 1; i++) {
 		for (int j = i + 1; j < disk_count; j++) {
