@@ -4,6 +4,7 @@ CFLAGS      = -std=gnu99 -Os -Wall
 CFLAGS     += -Isrc -Isrc/format -Isrc/drivers -Isrc/roms
 CFLAGS     += -DMII_65C02_DIRECT_ACCESS=1 -DMII_NO_MISH=1 -DKINDLE
 CFLAGS     += -include endian.h
+CFLAGS     += -MMD -MP
 LDFLAGS     = -static
 
 O           = build-static
@@ -44,6 +45,9 @@ $(O)/%.o: %.c | $(O)
 
 $(O):
 	mkdir -p $@
+
+DEPS = $(OBJS:.o=.d)
+-include $(DEPS)
 
 clean:
 	rm -rf $(O) $(OUTPUT)
