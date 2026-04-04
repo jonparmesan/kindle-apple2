@@ -168,6 +168,7 @@ kindle_fb_init(void)
 void
 kindle_fb_render_hires(const uint8_t *vram, uint16_t base_addr)
 {
+	if (!fb0 || !vram) return;
 	/*
 	 * Render 280x192 Apple II HIRES to game_w x game_h screen area.
 	 * Uses proportional scaling to fill the full width.
@@ -211,6 +212,7 @@ kindle_fb_render_hires(const uint8_t *vram, uint16_t base_addr)
 void
 kindle_fb_rect(int x, int y, int w, int h, uint8_t color)
 {
+	if (!fb0) return;
 	/* Clamp to framebuffer bounds */
 	int x0 = x < 0 ? 0 : x;
 	int y0 = y < 0 ? 0 : y;
@@ -271,6 +273,7 @@ static const uint8_t bayer4[4][4] = {
 void
 kindle_fb_render_pixels(const uint32_t *pixels)
 {
+	if (!fb0 || !pixels) return;
 	/*
 	 * Render the MII color pixel buffer (560x384, 2x Apple II res)
 	 * to the Kindle framebuffer with grayscale dithering.
@@ -586,6 +589,8 @@ kindle_fb_close(void)
 		usleep(500000);
 		munmap(fb0, fb_yres * fb_stride);
 	}
+	fb0 = NULL;
 	if (fdFB > 0)
 		close(fdFB);
+	fdFB = -1;
 }

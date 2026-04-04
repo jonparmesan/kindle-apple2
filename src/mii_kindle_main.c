@@ -164,6 +164,15 @@ main(int argc, const char *argv[])
 		disk1_path, save_path, sizeof(save_path)) != NULL);
 	if (have_save_path) {
 		if (!force_fresh && kindle_load_state(&mii, save_path) == 0) {
+			/*
+			 * mii_reset() set cpu_state.reset=1 which causes the CPU
+			 * to fetch the reset vector instead of continuing from the
+			 * saved PC. Clear it and tell the CPU to start fetching at
+			 * the restored PC.
+			 */
+			mii.cpu_state.raw = 0;
+			mii.cpu_state.addr = mii.cpu.PC;
+			mii.cpu_state.sync = 1;
 			fprintf(stderr, "kindle-apple2: restored from save state\n");
 		}
 	}
