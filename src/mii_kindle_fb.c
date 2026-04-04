@@ -211,10 +211,15 @@ kindle_fb_render_hires(const uint8_t *vram, uint16_t base_addr)
 void
 kindle_fb_rect(int x, int y, int w, int h, uint8_t color)
 {
-	for (int dy = 0; dy < h && (y + dy) < (int)fb_yres; dy++) {
-		int row = (y + dy) * fb_stride;
-		for (int dx = 0; dx < w && (x + dx) < (int)fb_xres; dx++) {
-			fb0[row + (x + dx)] = color;
+	/* Clamp to framebuffer bounds */
+	int x0 = x < 0 ? 0 : x;
+	int y0 = y < 0 ? 0 : y;
+	int x1 = x + w > (int)fb_xres ? (int)fb_xres : x + w;
+	int y1 = y + h > (int)fb_yres ? (int)fb_yres : y + h;
+	for (int py = y0; py < y1; py++) {
+		int row = py * fb_stride;
+		for (int px = x0; px < x1; px++) {
+			fb0[row + px] = color;
 		}
 	}
 }

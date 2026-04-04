@@ -160,7 +160,9 @@ main(int argc, const char *argv[])
 
 	/* Try to load saved state (unless --fresh) */
 	char save_path[512];
-	if (kindle_save_path_for_disk(disk1_path, save_path, sizeof(save_path))) {
+	int have_save_path = (kindle_save_path_for_disk(
+		disk1_path, save_path, sizeof(save_path)) != NULL);
+	if (have_save_path) {
 		if (!force_fresh && kindle_load_state(&mii, save_path) == 0) {
 			fprintf(stderr, "kindle-apple2: restored from save state\n");
 		}
@@ -277,7 +279,7 @@ main(int argc, const char *argv[])
 		g_frame_count, mii.cpu.PC, mii.state);
 
 	/* Save state if requested */
-	if (kindle_input_save_requested()) {
+	if (kindle_input_save_requested() && have_save_path) {
 		/* Ensure saves directory exists */
 		mkdir("/mnt/us/extensions/Apple2/saves", 0755);
 		if (kindle_save_state(&mii, save_path) == 0) {
