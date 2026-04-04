@@ -89,6 +89,7 @@ The emulator uses **kterm's on-screen keyboard** which appears at the bottom of 
 | Enter/Return | Confirm selection, advance text |
 | Space | Space bar |
 | ESC | **Shows exit dialog** (see below) |
+| Ctrl+D | **Opens disk swap menu** (see below) |
 | Ctrl+C | Immediate exit to Kindle |
 
 ### Exiting the emulator
@@ -103,6 +104,31 @@ Exit to Kindle?  Y / N
 - Press **N** or **ESC** again to resume playing
 
 You can also press **Ctrl+C** for an immediate exit without the prompt.
+
+### Multi-disk games
+
+Many Apple II games shipped on multiple disk sides (e.g., Oregon Trail has Side A and Side B). The emulator handles this automatically:
+
+**Auto-pairing:** If your disk images follow standard naming (e.g., `Oregon_Trail_Side_A.do` and `Oregon_Trail_Side_B.do`), the emulator automatically detects the pair and loads both disks into Drive 1 and Drive 2. You'll see a brief message at startup: *"Disk 2 loaded. Press Ctrl-D to swap disks."* Many games will read from Drive 2 automatically without asking you to flip.
+
+Supported naming patterns: `Side_A`/`Side_B`, `Disk_1`/`Disk_2`, `_A.`/`_B.`, `_1.`/`_2.` (case-insensitive).
+
+**Manual swap (Ctrl+D):** If the game still asks you to "flip the diskette," press **Ctrl+D** to open the disk swap menu:
+
+```
+SWAP DISK (Drive 1)  [Oregon_Trail_Side_A.do]
+1) Oregon Trail Side A
+2) Oregon Trail Side B
+3) Lode Runner
+Tab: Drive 2  ESC: Cancel
+```
+
+- Press **1-9** to select a disk image
+- Press **Tab** to switch between Drive 1 and Drive 2
+- Press **>** or **<** to page through larger collections
+- Press **ESC** to cancel and return to the game
+
+> **Note:** Some games may require the manual Ctrl+D swap even with auto-pairing, as not all Apple II software supports two-drive configurations. If a game asks you to flip the disk, use Ctrl+D.
 
 ### Game-specific controls
 
