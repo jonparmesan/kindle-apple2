@@ -25,7 +25,7 @@
 #include "mii_kindle_disks.h"
 #include "mii_floppy.h"
 
-static volatile int running = 1;
+volatile int running = 1;
 static int g_frame_count = 0;
 
 static void
