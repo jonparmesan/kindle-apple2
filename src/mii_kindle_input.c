@@ -11,12 +11,18 @@
 #include <unistd.h>
 #include <termios.h>
 
+/* Input state machine: clear transitions, no scattered booleans */
+typedef enum {
+	INPUT_RUNNING,
+	INPUT_EXIT_PROMPT,
+	INPUT_QUIT,
+	INPUT_SAVE_AND_QUIT,
+} input_state_t;
+
 static struct termios orig_termios;
 static int term_setup = 0;
-static int quit_requested = 0;
-static int save_requested = 0;
-static int disk_swap_requested = 0;
-static int exit_prompt_showing = 0;
+static input_state_t input_state = INPUT_RUNNING;
+static int disk_swap_requested = 0;	/* one-shot flag, orthogonal to quit state */
 
 int
 kindle_input_init(void)
@@ -34,9 +40,8 @@ kindle_input_init(void)
 	fcntl(STDIN_FILENO, F_SETFL,
 		fcntl(STDIN_FILENO, F_GETFL, 0) | O_NONBLOCK);
 
-	/* Clear kterm's terminal by sending ANSI escape codes BEFORE raw mode */
-	/* This hides the shell prompt and any command text */
-	write(STDOUT_FILENO, "\033[2J\033[H", 7);  /* clear screen + home cursor */
+	/* Clear kterm's terminal by sending ANSI escape codes */
+	write(STDOUT_FILENO, "\033[2J\033[H", 7);
 
 	fprintf(stderr, "kindle_input: stdin raw mode, terminal cleared\n");
 	return 0;
@@ -89,14 +94,7 @@ show_exit_prompt(void)
 	kindle_fb_draw_text(l3x, l3y, line3, 0x40, ss);
 
 	kindle_fb_update();
-	exit_prompt_showing = 1;
-}
-
-static void
-hide_exit_prompt(void)
-{
-	/* Next frame render will overwrite the dialog area */
-	exit_prompt_showing = 0;
+	input_state = INPUT_EXIT_PROMPT;
 }
 
 int
@@ -108,22 +106,24 @@ kindle_input_poll(mii_t *mii)
 	for (int i = 0; i < n; i++) {
 		unsigned char ch = buf[i];
 
-		/* Ctrl-C → quit immediately */
-		if (ch == 0x03) { quit_requested = 1; return 1; }
+		/* Ctrl-C → quit immediately regardless of state */
+		if (ch == 0x03) {
+			input_state = INPUT_QUIT;
+			return 1;
+		}
 
-		/* If exit prompt is showing, handle S/Y/N */
-		if (exit_prompt_showing) {
+		/* Exit prompt modal: only S/Y/N/ESC are valid */
+		if (input_state == INPUT_EXIT_PROMPT) {
 			if (ch == 's' || ch == 'S') {
-				save_requested = 1;
-				quit_requested = 1;
+				input_state = INPUT_SAVE_AND_QUIT;
 				return 1;
 			}
 			if (ch == 'y' || ch == 'Y') {
-				quit_requested = 1;
+				input_state = INPUT_QUIT;
 				return 1;
 			}
 			if (ch == 'n' || ch == 'N' || ch == 0x1B) {
-				hide_exit_prompt();
+				input_state = INPUT_RUNNING;
 				continue;
 			}
 			continue; /* ignore other keys while prompt is up */
@@ -154,19 +154,19 @@ kindle_input_poll(mii_t *mii)
 		mii_keypress(mii, ch);
 	}
 
-	return quit_requested;
+	return input_state == INPUT_QUIT || input_state == INPUT_SAVE_AND_QUIT;
 }
 
 int
 kindle_input_is_paused(void)
 {
-	return exit_prompt_showing;
+	return input_state == INPUT_EXIT_PROMPT;
 }
 
 int
 kindle_input_save_requested(void)
 {
-	return save_requested;
+	return input_state == INPUT_SAVE_AND_QUIT;
 }
 
 int
