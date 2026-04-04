@@ -53,20 +53,29 @@ getmsec(void)
 int
 main(int argc, const char *argv[])
 {
-	if (argc < 2) {
+	const char *disk1_path = NULL;
+	const char *disk2_path = NULL;
+	int force_mono = 0;
+
+	/* Parse arguments: optional --mono flag, then disk paths */
+	for (int i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "--mono") == 0) {
+			force_mono = 1;
+		} else if (!disk1_path) {
+			disk1_path = argv[i];
+		} else if (!disk2_path) {
+			disk2_path = argv[i];
+		}
+	}
+	if (!disk1_path) {
 		fprintf(stderr,
 			"kindle-apple2 - Apple IIe emulator for Kindle\n"
-			"Usage: %s <disk1.do> [disk2.do]\n"
+			"Usage: %s [--mono] <disk1.do> [disk2.do]\n"
 			"\n"
-			"Loads an Apple II disk image and runs the emulator.\n"
-			"Touch the on-screen keyboard to type.\n"
-			"Press ESC to quit.\n",
+			"  --mono    Force monochrome rendering (no grayscale dithering)\n",
 			argv[0]);
 		return 1;
 	}
-
-	const char *disk1_path = argv[1];
-	const char *disk2_path = argc > 2 ? argv[2] : NULL;
 
 	signal(SIGINT, sighandler);
 	signal(SIGTERM, sighandler);
@@ -118,8 +127,10 @@ main(int argc, const char *argv[])
 	mii_reset(&mii, true);
 	mii.state = MII_RUNNING;
 
-	/* Force monochrome mode for e-ink */
-	mii.video.monochrome = 1;
+	/* Force monochrome only if --mono flag is set.
+	 * Otherwise, use color rendering with grayscale dithering. */
+	if (force_mono)
+		mii.video.monochrome = 1;
 
 	/* --- Initialize Kindle framebuffer --- */
 	if (kindle_fb_init() < 0) {
@@ -134,11 +145,13 @@ main(int argc, const char *argv[])
 	/* Initialize keyboard input (stdin from kterm) */
 	kindle_input_init();
 
-	fprintf(stderr, "kindle-apple2: running\n");
+	fprintf(stderr, "kindle-apple2: running (mode=%s)\n",
+		force_mono ? "mono" : "dithered");
 
 	/* --- Main loop --- */
 	int last_update_ms = 0;
 	int update_interval_ms = 150; /* ~6-7 fps for e-ink */
+	uint32_t last_frame_seed = 0; /* track video changes */
 
 	while (running && mii.state == MII_RUNNING) {
 		/* Check for keyboard input */
@@ -157,28 +170,36 @@ main(int argc, const char *argv[])
 		/* Render to e-ink at limited framerate */
 		int now = getmsec();
 		if (now - last_update_ms >= update_interval_ms) {
+			/* Skip rendering if video hasn't changed */
+			if (mii.video.frame_seed == last_frame_seed) {
+				usleep(1000);
+				continue;
+			}
+			last_frame_seed = mii.video.frame_seed;
 			last_update_ms = now;
 
-			/* Get the active HIRES page base address from video state */
-			uint16_t base = mii.video.base_addr;
-			if (base != 0x2000 && base != 0x4000)
-				base = 0x2000; /* default to page 1 */
+			if (force_mono) {
+				/* Monochrome path: read VRAM directly (original behavior) */
+				uint16_t base = mii.video.base_addr;
+				if (base != 0x2000 && base != 0x4000)
+					base = 0x2000;
+				const uint8_t *vram = mii.bank[0].mem;
+				kindle_fb_render_hires(vram, base);
+			} else {
+				/* Dithered path: read from MII's color pixel buffer */
+				kindle_fb_render_pixels(mii.video.pixels);
+			}
 
-			/* Read VRAM directly from the main bank memory */
-			const uint8_t *vram = mii.bank[0].mem; /* MII_BANK_MAIN */
-
-			/* Render the HIRES screen */
-			kindle_fb_render_hires(vram, base);
-
-			/* Trigger e-ink update (game area only — don't touch keyboard below) */
+			/* Trigger e-ink update */
 			kindle_fb_update();
 
 			g_frame_count++;
 
 			/* Log status every 50 frames (~7.5 sec) */
 			if (g_frame_count % 50 == 0) {
-				fprintf(stderr, "kindle-apple2: frame %d, PC=$%04X, base=$%04X, state=%d\n",
-					g_frame_count, mii.cpu.PC, base, mii.state);
+				fprintf(stderr, "kindle-apple2: frame %d, PC=$%04X, base=$%04X, state=%d, mode=%s\n",
+					g_frame_count, mii.cpu.PC, mii.video.base_addr,
+					mii.state, force_mono ? "mono" : "dithered");
 			}
 		}
 

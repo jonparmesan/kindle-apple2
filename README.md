@@ -10,7 +10,7 @@ Before installing, make sure you have:
 
 1. **A Kindle with KUAL support** — Tested on Kindle Paperwhite. Other models should work but are untested.
 2. **KUAL** — The Kindle Unified Application Launcher. This is how you'll launch the emulator. Install guide: [MobileRead thread](https://www.mobileread.com/forums/showthread.php?t=203326).
-3. **kterm** — A terminal emulator for Kindle that provides the on-screen keyboard. Download from [GitHub](https://github.com/bfabiszewski/kterm) or [MobileRead](https://www.mobileread.com/forums/showthread.php?t=244292). Copy the `kterm` folder to `/mnt/us/extensions/` on your Kindle.
+3. **kterm** — A terminal emulator for Kindle that provides the on-screen keyboard. Download from [GitHub](https://github.com/bfabiszewski/kterm). Copy the `kterm` folder to `/mnt/us/extensions/` on your Kindle.
 4. **Apple II disk images** — The emulator does not include any games. You'll need to provide your own disk images in `.do`, `.dsk`, `.nib`, `.woz`, or `.po` format. Many public domain Apple II programs are available online.
 
 ## Installation
@@ -117,7 +117,7 @@ Most Apple II games display their controls on screen.
 | Nibble | `.nib` | Raw nibblized disk format |
 | WOZ | `.woz` | Modern preservation format (flux-level accuracy) |
 
-Most Apple II disk images you'll find online are in `.do` or `.dsk` format. These are the most compatible.
+Most Apple II disk images found online are in `.do` or `.dsk` format.
 
 ## Troubleshooting
 
@@ -181,19 +181,29 @@ The core is a stripped-down version of the [MII Apple IIe emulator](https://gith
 - **Modular architecture** — CPU, video, and disk I/O are cleanly separated
 - **Accurate 65C02 emulation** — runs at native speed with cycle-accurate timers
 
-We stripped MII from ~85K LOC to ~30K LOC by removing the OpenGL/X11 UI, audio, mouse card, serial card, SmartPort, Mockingboard, and debug shell. What remains is the pure emulation core.
+We stripped MII down to ~14K LOC by removing the OpenGL/X11 UI, audio, mouse card, serial card, SmartPort, Mockingboard, and debug shell. What remains is the pure emulation core.
 
 ### Display rendering
 
-The Apple II HIRES screen is 280x192 pixels. While the original hardware could produce colors via NTSC artifact coloring, the emulator renders in monochrome mode for e-ink. The emulator:
+The Apple II HIRES screen is 280x192 pixels. The original hardware produced colors via NTSC artifact coloring (purple, green, orange, blue). The emulator supports two rendering modes:
 
-1. Reads the Apple II's HIRES video RAM directly (at memory address $2000 or $4000)
-2. Decodes the Apple II's interleaved scanline addressing
-3. Scales each pixel proportionally to fill the Kindle's screen width
-4. Writes pixel values directly to the Kindle's framebuffer (`/dev/fb0`) via `mmap`
-5. Triggers an e-ink display update via ioctl
+**Dithered mode (default):** The emulator renders full-color Apple II graphics internally, then converts to grayscale using ordered Bayer dithering. This maps the 16 Apple II colors to distinguishable gray patterns on the e-ink display, so color games (LORES, DHIRES, color HIRES) are actually playable. Different colors produce different gray levels instead of collapsing to flat black/white.
 
-The monochrome rendering maps each Apple II pixel to black (on) or white (off), which displays cleanly on e-ink without dithering. Games that relied heavily on color may lose some visual information, but most Apple II software was designed to be usable on monochrome monitors.
+**Monochrome mode (`--mono`):** Each Apple II pixel maps to black (on) or white (off) with no gray levels. Use this for text adventures and games designed for monochrome monitors.
+
+The rendering pipeline:
+
+1. MII's video system renders Apple II graphics to a 560x384 RGBA pixel buffer
+2. Each pixel is converted to grayscale luminance (BT.601 weighting)
+3. Ordered dithering (4x4 Bayer matrix) is applied to maximize contrast across the Kindle's 16 gray levels
+4. Pixels are scaled proportionally to fill the Kindle's screen width
+5. Values are written directly to the Kindle's framebuffer (`/dev/fb0`) via `mmap`
+6. An e-ink display update is triggered via ioctl
+
+To use monochrome mode for a specific game, add `--mono` before the disk path in `menu.json`:
+```json
+{"name": "Zork", "priority": 0, "action": "./apple2.sh", "params": "--mono disks/Zork.dsk", "exitmenu": true, "status": false}
+```
 
 The emulator detects the Kindle's screen resolution at startup (`FBIOGET_VSCREENINFO`) and computes the scaling dynamically, so it works on any Kindle model.
 
@@ -229,7 +239,7 @@ The binary is cross-compiled for ARM Linux using [Zig](https://ziglang.org/)'s b
 zig cc -target arm-linux-musleabi -static
 ```
 
-This produces a fully **statically linked** ARM binary with musl libc — no runtime dependencies on the Kindle's system libraries. The binary is ~1.4MB and runs on any ARM Linux system.
+This produces a fully **statically linked** ARM binary with musl libc — no runtime dependencies on the Kindle's system libraries. The binary is ~1.4MB.
 
 No Docker, no SDK, no toolchain setup. Just `zig` and `make`.
 
@@ -237,7 +247,7 @@ No Docker, no SDK, no toolchain setup. Just `zig` and `make`.
 
 ### Prerequisites
 
-- [Zig](https://ziglang.org/) 0.13+ (install via `brew install zig` on macOS)
+- [Zig](https://ziglang.org/) 0.15+ (install via `brew install zig` on macOS)
 - macOS or Linux
 
 ### Build the Kindle binary
@@ -260,22 +270,16 @@ cp kindle-apple2-static kual_extension/apple2
 
 ### Test on macOS (headless)
 
-For development, you can run the emulator headless on macOS and capture screenshots:
-
-```bash
-make -f Makefile.test
-./build-test/bin/mii_test your_disk_image.do 300
-# Produces screen_output.pgm (Apple II screen after ~30 sec emulation)
-```
+`Makefile.test` builds a headless version for macOS that can boot a disk image and dump the Apple II screen to a PGM file. This requires writing a test harness (`mii_test_main.c`) — see the source code for the Kindle main loop as a reference.
 
 ## Compatibility
 
-| Device | Resolution | Status |
-|--------|-----------|--------|
-| Kindle Paperwhite (758x1024) | Tested | Working |
-| Kindle Touch (600x800) | Untested | Should work |
-| Kindle Paperwhite 5 (1236x1648) | Untested | Should work |
-| Other Kindle models | Untested | Should work (dynamic resolution detection) |
+| Device | Status |
+|--------|--------|
+| Kindle Paperwhite (758x1024) | Tested, working |
+| Other Kindle models | Untested, should work (dynamic resolution detection) |
+
+The emulator auto-detects screen resolution at startup and scales accordingly.
 
 ## Project Structure
 
@@ -296,7 +300,7 @@ kindle-apple2/
 │   ├── mii_kindle_main.c    # Main loop
 │   ├── mii.c/h              # MII emulator core
 │   ├── mii_65c02.c/h        # 65C02 CPU emulation
-│   ├── mii_video.c/h        # Apple II video (HIRES/text/lores)
+│   ├── mii_video.c/h        # Apple II video rendering
 │   ├── mii_bank.c/h         # Memory bank management
 │   ├── drivers/             # Disk II controller, no-slot clock
 │   ├── format/              # Disk image format support (DSK/NIB/WOZ)
